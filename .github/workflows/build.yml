@@ -6,6 +6,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fast compile + DSP test check. Runs even when hosted Mac runners are scarce.
+  linux-check:
+    name: Linux (compile + DSP tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxext-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: DSP tests
+        run: ./build/StompBoxDspTest_artefacts/Release/StompBoxDspTest
+
   macos:
     name: macOS (AU + VST3, universal)
     runs-on: macos-15-intel   # arm64 runners are capacity-limited; output is still universal
