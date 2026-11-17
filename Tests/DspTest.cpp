@@ -246,6 +246,19 @@ int main (int argc, char** argv)
                       << "% of one core, stereo (two amps) " << juce::String (100.0 * ms2 / 6000.0, 2) << "%\n";
         }
 
+        // Mono in -> mono out (Logic's "Mono" format on a mono track)
+        {
+            Engine e; e.prepare (fs, block);
+            juce::AudioBuffer<float> m (1, n);
+            m.copyFrom (0, 0, guitar, 0, 0, n);
+            for (int i = 0; i < n; i += block)
+            {
+                juce::AudioBuffer<float> view (m.getArrayOfWritePointers(), 1, i, std::min (block, n - i));
+                e.process (view, 1, false);
+            }
+            check (allFinite (m) && m.getMagnitude (0, 0, n) > 0.01f, "mono in -> mono out works");
+        }
+
         // Silence in -> silence out (no DC, no self-noise blowups)
         Engine e; e.prepare (fs, block);
         juce::AudioBuffer<float> z (2, n); z.clear();

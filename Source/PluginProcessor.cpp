@@ -24,11 +24,15 @@ StompBoxProcessor::StompBoxProcessor()
 //==============================================================================
 bool StompBoxProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    // Mono guitar track (mono in -> stereo out) or stereo in -> stereo out.
+    // Mono -> mono (Logic's "Mono" on a mono track: both amps hear the same
+    // signal, so one amp's output is the whole sound), mono -> stereo, and
+    // stereo -> stereo (each side into its own Royal 30).
+    const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
     const auto in = layouts.getMainInputChannelSet();
     const auto out = layouts.getMainOutputChannelSet();
-    return out == juce::AudioChannelSet::stereo()
-        && (in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
+    return (in == mono && out == mono)
+        || (in == mono && out == stereo)
+        || (in == stereo && out == stereo);
 }
 
 void StompBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
