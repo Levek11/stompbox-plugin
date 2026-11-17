@@ -1,0 +1,22 @@
+Installing StompBox in Logic Pro
+================================
+
+1. Unzip StompBox-AU.zip. You get StompBox.component.
+
+2. Move it into your Components folder:
+     ~/Library/Audio/Plug-Ins/Components/
+   (In Finder: Go > Go to Folder..., paste the path above.)
+
+3. The build is not notarized by Apple, so clear the download flag once.
+   Open Terminal and run:
+     xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/StompBox.component
+
+4. Open Logic Pro. If StompBox doesn't show up, open
+   Logic Pro > Settings > Plug-in Manager and click "Reset & Rescan Selection".
+
+5. On a guitar track: Audio FX slot > Audio Units > Levek11 > StompBox.
+   Choose Mono->Stereo on a mono DI track, so each Royal 30 gets its own side.
+
+Loading your cab IR: open the Amp / Cab tab and click "Load IR...".
+The IR is copied into the Logic project, so it keeps working even if the
+file moves.

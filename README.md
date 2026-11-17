@@ -1,0 +1,64 @@
+# StompBox
+
+A Logic Pro (AU) guitar plugin: a virtual pedalboard into two identical Royal 30
+amps (an AC30 Top Boost style circuit model), one per stereo side, each into a
+cab IR. Built for worship guitar, built in the cloud.
+
+## Build status
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | **In this build** |
+| 2 | First pedals: Hot Rod, Golden Hour, one delay | Next |
+| 3 | Remaining pedals in batches | Later |
+
+## What's in step 1
+
+- **Royal 30, x2.** Two identical amps, one per side, sharing one set of controls:
+  Channel (Normal / Top Boost), Volume, Treble, Bass, Cut, Master.
+  Mono input feeds both amps the same signal.
+- **Circuit-based model.** ECC83 preamp stages with grid-conduction bias shift,
+  the Top Boost Treble/Bass stack solved from its real component values
+  (100k slope, 50 pF / 22 nF / 22 nF, fixed 10k "mid", 1M log pots), cathode
+  follower, long-tailed-pair phase inverter, the Cut network across the PI
+  outputs, 4 x EL84 push-pull output with rectifier sag, and no negative
+  feedback (so the speaker's impedance curve shows in the response).
+- **Cab IR loader.** WAV/AIFF, same IR on both sides, zero-latency convolution.
+  The IR is saved inside the plugin state, so a Logic project keeps working if
+  the file moves. Without an IR, a basic speaker filter is used.
+- **Zero latency.** No lookahead anywhere; reports 0 samples to Logic.
+- **Live / Studio.** Live runs the amps at 2x oversampling, Studio at 4x.
+  Offline bounces always use Studio. Remembered globally, not per project.
+
+## Getting the plugin
+
+Every push builds on GitHub Actions (macOS, universal Apple silicon + Intel).
+Open the latest run under **Actions**, download **StompBox-macOS**, and follow
+`INSTALL.txt` inside it.
+
+The build also runs the DSP tests (tone stack, gain staging, zero latency,
+IR save/restore, levels, CPU) and validates the AU with `auval`.
+
+## Building locally (optional)
+
+```
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+JUCE 8.0.9 is fetched automatically.
+
+## Layout
+
+```
+Source/dsp/Filters.h     filter building blocks
+Source/dsp/Tubes.h       triode / phase inverter / EL84 curves and stages
+Source/dsp/ToneStack.h   Top Boost tone stack
+Source/dsp/Royal30.*     one amp, and the dual-amp pair
+Source/dsp/CabIR.*       IR loading, state storage, zero-latency convolution
+Source/dsp/Engine.*      full chain: oversampling -> amps -> cab -> output
+Source/ui/               look and feel, Amp/Cab tab
+Tests/DspTest.cpp        headless checks, run in CI
+```
+
+The Goldman font is bundled under the SIL Open Font License (`assets/fonts`).

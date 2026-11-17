@@ -1,0 +1,71 @@
+name: Build StompBox
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS (AU + VST3, universal)
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE download
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.9-${{ runner.os }}-v1
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: DSP tests
+        run: |
+          TEST=$(find build -type f -perm -u+x -name StompBoxDspTest | head -1)
+          "$TEST" dsp-renders
+
+      - name: Sign (ad-hoc) and validate the Audio Unit
+        run: |
+          AU=$(find build -type d -name "StompBox.component" -path "*Release*" | head -1)
+          VST3=$(find build -type d -name "StompBox.vst3" -path "*Release*" | head -1)
+          codesign --force --deep --sign - "$AU"
+          codesign --force --deep --sign - "$VST3"
+
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$AU" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auval -a | grep -i stbx || true
+          auval -strict -v aufx Stbx Levk
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          AU=$(find build -type d -name "StompBox.component" -path "*Release*" | head -1)
+          VST3=$(find build -type d -name "StompBox.vst3" -path "*Release*" | head -1)
+          ditto -c -k --keepParent "$AU" dist/StompBox-AU.zip
+          ditto -c -k --keepParent "$VST3" dist/StompBox-VST3.zip
+          cp INSTALL.txt dist/
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: StompBox-macOS
+          path: dist/
+
+      - name: Upload test renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsp-renders
+          path: dsp-renders/
