@@ -11,9 +11,11 @@ namespace stompbox
 /** The full StompBox signal chain for build step 1:
     input -> [oversampled] dual Royal 30 -> cab IR (L and R) -> output level.
 
-    Mono input feeds both amps the same signal. In that case only one amp and
-    one convolution actually run and the result is copied to the right side,
-    which is sample-identical to running both. */
+    The input jack is mono: a stereo input is folded to the side that carries
+    the guitar (or averaged if both do). Both amps then get the same signal, so
+    only one amp and one convolution actually run and the result is copied to
+    the right side, which is sample-identical to running both. Stereo before
+    the amps arrives with the stereo pedals in step 2. */
 class Engine
 {
 public:
@@ -48,6 +50,10 @@ private:
     std::atomic<int> quality { (int) Quality::studio };
     int activeQuality = -1;
     double baseRate = 48000.0;
+
+    void foldInputToMono (juce::AudioBuffer<float>& buffer) noexcept;
+    float inputEnv[2] { 0.0f, 0.0f };
+    float foldWeight[2] { 0.5f, 0.5f };
 
     std::atomic<float> outputDb { 0.0f };
     juce::SmoothedValue<float> outputGain;

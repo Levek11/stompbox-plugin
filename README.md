@@ -16,7 +16,9 @@ cab IR. Built for worship guitar, built in the cloud.
 
 - **Royal 30, x2.** Two identical amps, one per side, sharing one set of controls:
   Channel (Normal / Top Boost), Volume, Treble, Bass, Cut, Master.
-  Mono input feeds both amps the same signal.
+  The input jack is mono like a guitar cable: on a stereo track with the guitar
+  on one side, StompBox picks up that side, and both amps get the same signal.
+  Works as Mono, Mono→Stereo or Stereo in Logic.
 - **Circuit-based model.** ECC83 preamp stages with grid-conduction bias shift,
   the Top Boost Treble/Bass stack solved from its real component values
   (100k slope, 50 pF / 22 nF / 22 nF, fixed 10k "mid", 1M log pots), cathode

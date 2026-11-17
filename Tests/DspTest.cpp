@@ -243,7 +243,23 @@ int main (int argc, char** argv)
             const double ms2 = juce::Time::getMillisecondCounterHiRes() - t1;
             check (allFinite (st), juce::String (qn) + ": stereo output finite");
             std::cout << "    " << qn << " CPU: mono " << juce::String (100.0 * ms / 6000.0, 2)
-                      << "% of one core, stereo (two amps) " << juce::String (100.0 * ms2 / 6000.0, 2) << "%\n";
+                      << "% of one core, stereo input " << juce::String (100.0 * ms2 / 6000.0, 2) << "%\n";
+        }
+
+        // Stereo track with the guitar on one side only (Input 1-2, guitar in 2)
+        {
+            Engine em; em.prepare (fs, block);
+            Engine es; es.prepare (fs, block);
+            juce::AudioBuffer<float> mono (2, n), rightOnly (2, n);
+            mono.copyFrom (0, 0, guitar, 0, 0, n); mono.clear (1, 0, n);
+            rightOnly.clear (0, 0, n); rightOnly.copyFrom (1, 0, guitar, 0, 0, n);
+            run (em, mono, 1);
+            run (es, rightOnly, 2);
+            bool lr = true;
+            for (int i = 0; i < n && lr; ++i) lr = rightOnly.getSample (0, i) == rightOnly.getSample (1, i);
+            const double dm = rmsDb (mono.getReadPointer (0), n), ds = rmsDb (rightOnly.getReadPointer (0), n);
+            check (lr && std::abs (dm - ds) < 0.5, "guitar on right input only -> centred on both amps, same level ("
+                   + juce::String (ds - dm, 2) + " dB)");
         }
 
         // Mono in -> mono out (Logic's "Mono" format on a mono track)
