@@ -156,8 +156,16 @@ bool BoardModel::place (int index, int slot)
 
 void BoardModel::returnToShelf (int index)
 {
-    if (index >= 0 && index < numPedals)
-        pedals[(size_t) index].slot = -1;
+    if (index < 0 || index >= numPedals)
+        return;
+
+    // Back on the shelf, a pedal goes back to its default settings.
+    auto& p = pedals[(size_t) index];
+    p.slot = -1;
+    p.on = p.onB = true;
+    const auto& defs = catalog()[(size_t) index].controls;
+    for (size_t k = 0; k < defs.size(); ++k)
+        p.values[k] = defs[k].defaultValue;
 }
 
 void BoardModel::setOn (int index, bool on, int footswitch)
@@ -209,7 +217,7 @@ int BoardModel::setSize (Size newSize)
     {
         const int w = cat[(size_t) index].slots;
         if (r >= 0 && c - (w - 1) < 0) { --r; c = columns() - 1; }   // doesn't fit: next row up
-        if (r < 0) { ++sentBack; continue; }
+        if (r < 0) { ++sentBack; returnToShelf (index); continue; }
         pedals[(size_t) index].slot = slotAt (r, c - (w - 1));
         c -= w;
         if (c < 0) { --r; c = columns() - 1; }

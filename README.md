@@ -24,6 +24,7 @@ cab IR. Built for worship guitar, built in the cloud.
 - Signal runs right to left, bottom row first. Cables route themselves; after
   a stereo pedal they're doubled (L and R).
 - Click a pedal for its close-up; the footswitch toggles it on the board.
+- A pedal put back on the shelf returns to its default settings.
 - Everything is saved with the Logic project. Pedals pass audio through
   unchanged until their sound arrives (step noted in each close-up).
 
@@ -34,9 +35,10 @@ cab IR. Built for worship guitar, built in the cloud.
 - **Golden Hour** (Morning Glory V4): Bluesbreaker-family gain stage into
   soft symmetrical diode clipping; Gain switch (up = more gain and low end),
   Hi-Cut switch, high-headroom Volume. Oversampled.
-- **Afterglow** (HALO): stereo modulated dual echo with tape-like repeats
-  (darker, saturating), RHYTHM 1/4, dotted 1/8 or HALO (both at once), SYNC to
-  Logic's tempo (incl. tempo changes) with SYNC ON, or the TIME knob in ms with SYNC OFF, trails when switched off.
+- **Afterglow** (HALO): stereo modulated dual echo, always in the HALO rhythm
+  (dotted eighth left, quarter right) and always synced to Logic's tempo
+  (incl. tempo changes). Tape-like repeats; TONE makes them darker or brighter
+  (1 kHz to 8.75 kHz); trails when switched off.
 - The chain is mono until a stereo pedal; after it, mono pedals run as dual
   mono and each side feeds its own Royal 30.
 

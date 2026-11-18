@@ -113,8 +113,8 @@ void run (Check&& check)
 
     // Shelf return
     b.returnToShelf (idx ("hotRod"));
-    check (b.pedal (idx ("hotRod")).slot == -1 && b.pedal (idx ("hotRod")).values[1] == 0.83f,
-           "back on the shelf, a pedal keeps its knob settings");
+    check (b.pedal (idx ("hotRod")).slot == -1 && b.pedal (idx ("hotRod")).values[1] == catalog()[(size_t) idx ("hotRod")].controls[1].defaultValue
+           && b.pedal (idx ("hotRod")).on, "back on the shelf, a pedal returns to its default settings");
 }
 
 } // namespace boardtests

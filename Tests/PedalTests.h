@@ -131,33 +131,37 @@ void run (Check&& check)
         set (v, "afterglow", "repeats", 0.0f);
         set (v, "afterglow", "mix", 1.0f);
 
-        set (v, "afterglow", "rhythm", 0.5f);   // D.1/8, synced
+        // Always HALO, always synced: dotted eighth leaning left, quarter leaning right.
         auto o = impulse (p, v, 1.0, 120.0);
         check (peakIn (o[0], 360.0, 400.0) > 0.1f, "Afterglow: the very first note gets its echo at full level");
-        const double tL = peakTimeMs (o[0], 50.0, 900.0), tR = peakTimeMs (o[1], 50.0, 900.0);
-        check (std::abs (tL - 375.0) < 2.0 && std::abs (tR - 375.0) < 2.0,
-               "Afterglow D.1/8 at 120 BPM: echo at " + juce::String (tL, 1) + " ms (375 expected)");
-
-        o = impulse (p, v, 1.0, 90.0);
-        check (std::abs (peakTimeMs (o[0], 50.0, 900.0) - 500.0) < 2.0, "Afterglow follows Logic's tempo (D.1/8 at 90 BPM = 500 ms)");
-
-        set (v, "afterglow", "rhythm", 1.0f);   // HALO
-        o = impulse (p, v, 1.0, 120.0);
         const double hL = peakTimeMs (o[0], 50.0, 900.0), hR = peakTimeMs (o[1], 50.0, 900.0);
         check (std::abs (hL - 375.0) < 2.0 && std::abs (hR - 500.0) < 2.0,
-               "Afterglow HALO: dotted eighth leans left (" + juce::String (hL, 0) + " ms), quarter leans right ("
+               "Afterglow HALO at 120 BPM: dotted eighth left (" + juce::String (hL, 0) + " ms), quarter right ("
                + juce::String (hR, 0) + " ms)");
 
-        set (v, "afterglow", "rhythm", 0.0f);   // 1/4, SYNC OFF
-        set (v, "afterglow", "sync", 1.0f);
-        set (v, "afterglow", "time", 0.5f);
-        o = impulse (p, v, 1.0, 120.0);
-        const double expected = 60.0 * std::sqrt (25.0);
-        check (std::abs (peakTimeMs (o[0], 50.0, 900.0) - expected) < 2.0, "Afterglow SYNC OFF: TIME sets milliseconds (" + juce::String (expected, 0) + " ms)");
+        o = impulse (p, v, 1.2, 90.0);
+        check (std::abs (peakTimeMs (o[0], 50.0, 1100.0) - 500.0) < 2.0 && std::abs (peakTimeMs (o[1], 50.0, 1100.0) - 666.7) < 2.0,
+               "Afterglow follows Logic's tempo (90 BPM: 500 ms and 667 ms)");
+
+        // TONE: brighter repeats clockwise. Compare high-frequency energy of the 2nd repeat.
+        {
+            auto hfEnergy = [&] (float tone)
+            {
+                auto w = v; set (w, "afterglow", "tone", tone); set (w, "afterglow", "repeats", 0.6f);
+                auto r = impulse (p, w, 1.0, 120.0);
+                double e = 0;
+                for (int i = (int) (740.0 * 48); i < (int) (760.0 * 48); ++i)
+                {
+                    const double d = r[0][(size_t) i] - r[0][(size_t) i - 1];   // first difference ~ highs
+                    e += d * d;
+                }
+                return e;
+            };
+            const double dark = hfEnergy (0.0f), mid = hfEnergy (0.6f), bright = hfEnergy (1.0f);
+            check (dark < mid && mid < bright, "Afterglow TONE: repeats get brighter clockwise");
+        }
 
         // Trails: switch off right after the note; the echo still comes.
-        set (v, "afterglow", "sync", 0.0f);
-        set (v, "afterglow", "rhythm", 0.5f);
         set (v, "afterglow", "repeats", 0.5f);
         o = impulse (p, v, 1.5, 120.0, 4800);
         check (peakIn (o[0], 360.0, 400.0) > 0.05f && peakIn (o[0], 735.0, 775.0) > 0.01f,

@@ -9,19 +9,15 @@ namespace stompbox::dsp
 /** Afterglow: a modulated dual echo in the spirit of the Keeley HALO, which
     recreates Andy Timmons' dual-head tape echo.
 
-    Two echo lines (A and B), each with its own feedback loop that behaves
-    like tape: a high-pass and a gentle low-pass in the loop (every repeat
-    gets darker and thinner, as on tape) and soft saturation (tape
-    compression). A slow LFO wobbles the delay times, A and B a quarter
-    cycle apart, which spreads the repeats in stereo.
+    Always in the HALO rhythm and always synced to Logic's tempo (following
+    its tempo changes, gliding like tape): echo line A at a dotted eighth
+    leaning left, line B at a quarter note leaning right, interlocking.
 
-    Rhythm:  1/4    both lines at a quarter note
-             D.1/8  both lines at a dotted eighth
-             HALO   A at a dotted eighth, B at a quarter note, A leaning left
-                    and B leaning right: the "halo" of interlocking echoes
-
-    SYNC ON follows Logic's tempo (and its tempo changes, gliding like tape);
-    SYNC OFF uses the TIME knob in milliseconds.
+    Each line has its own feedback loop that behaves like tape: a high-pass
+    and a low-pass in the loop (every repeat gets thinner and darker) and soft
+    saturation (tape compression). TONE sets that low-pass, 1 kHz (dark) to
+    8.75 kHz (bright), like the HALO's tone control. A slow LFO wobbles the
+    delay times, A and B a quarter cycle apart, spreading the repeats.
 
     The dry signal passes untouched. Turning it off stops new input, but the
     repeats carry on and fade naturally (trails). */
@@ -29,10 +25,9 @@ class Afterglow final : public Pedal
 {
 public:
     Afterglow()
-        : iTime (control ("afterglow", "time")), iRepeats (control ("afterglow", "repeats")),
+        : iTone (control ("afterglow", "tone")), iRepeats (control ("afterglow", "repeats")),
           iMix (control ("afterglow", "mix")), iRate (control ("afterglow", "rate")),
-          iDepth (control ("afterglow", "depth")), iRhythm (control ("afterglow", "rhythm")),
-          iSync (control ("afterglow", "sync"))
+          iDepth (control ("afterglow", "depth"))
     {
     }
 
@@ -51,7 +46,7 @@ public:
         for (auto& l : lines)
         {
             l.loopHp.setCutoff (140.0, fs);
-            l.loopLp.setCutoff (3600.0, fs);
+            l.loopLp.setCutoff (3600.0, fs);   // replaced by TONE on the first block
         }
         reset();
     }
@@ -64,7 +59,7 @@ public:
             l.write = 0; l.delay = -1.0; l.last = 0.0;
             l.loopHp.reset(); l.loopLp.reset();
         }
-        phase = 0.0; gate = 0.0; silentSamples = 0; idle = true;
+        phase = 0.0; gate = 0.0; silentSamples = 0; idle = true; lastTone = -1.0f;
     }
 
     void process (float* const* ch, int numCh, int n, const float* v, bool on, const PedalContext& ctx) noexcept override
@@ -76,19 +71,23 @@ public:
         idle = false;
 
         // --- Controls --------------------------------------------------------
-        const int rhythm = juce::roundToInt (v[iRhythm] * 2.0f);   // 0 = 1/4, 1 = D.1/8, 2 = HALO
-        const bool synced = v[iSync] < 0.5f;
-        const double quarter = synced ? 60.0 / juce::jlimit (30.0, 300.0, ctx.bpm)
-                                      : 0.001 * 60.0 * std::pow (1500.0 / 60.0, (double) v[iTime]);
-        const double tA = rhythm == 0 ? quarter : 0.75 * quarter;
-        const double tB = rhythm == 1 ? 0.75 * quarter : quarter;
+        const double quarter = 60.0 / juce::jlimit (30.0, 300.0, ctx.bpm);
+        const double tA = 0.75 * quarter;   // dotted eighth
+        const double tB = quarter;          // quarter note
+
+        if (v[iTone] != lastTone)
+        {
+            lastTone = v[iTone];
+            const double cutoff = 1000.0 * std::pow (8.75, (double) lastTone);   // 1 kHz .. 8.75 kHz
+            for (auto& l : lines) l.loopLp.setCutoff (cutoff, fs);
+        }
         const double maxT = maxDelaySeconds - 0.01;
         lines[0].target = juce::jlimit (0.001, maxT, tA) * fs;
         lines[1].target = juce::jlimit (0.001, maxT, tB) * fs;
 
         const double feedback = 0.95 * std::pow ((double) v[iRepeats], 0.8);
         const double wetGain = 1.2 * (double) v[iMix];
-        const double cross = rhythm == 2 ? 0.30 : 0.15;            // how much of each line reaches the other side
+        constexpr double cross = 0.30;   // how much of each line reaches the other side
         const double lfoRate = 0.1 * std::pow (60.0, (double) v[iRate]);
         const double depth = 0.004 * fs * std::pow ((double) v[iDepth], 1.5);   // up to 4 ms of wobble
         const double phaseStep = lfoRate / fs;
@@ -175,7 +174,8 @@ private:
     };
 
     std::array<Line, 2> lines;
-    const int iTime, iRepeats, iMix, iRate, iDepth, iRhythm, iSync;
+    const int iTone, iRepeats, iMix, iRate, iDepth;
+    float lastTone = -1.0f;
     double fs = 48000.0, glide = 0.001, gateStep = 0.01, gate = 0.0, phase = 0.0;
     int silentSamples = 0;
     bool idle = true;
