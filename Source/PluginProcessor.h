@@ -54,6 +54,11 @@ public:
 
     juce::File getLastIRFolder() const;
 
+    // Editor size: a global preference (last size the user chose), as a scale
+    // of the 1440 x 900 design size.
+    float getEditorScale() const;
+    void setEditorScale (float scale);
+
     // Pedalboard (message thread). Edits go through editBoard so the version
     // counter tells the UI (and later the audio chain) that something changed.
     template <typename Fn>

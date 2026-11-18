@@ -110,6 +110,18 @@ juce::File StompBoxProcessor::getLastIRFolder() const
     return f.isDirectory() ? f : juce::File::getSpecialLocation (juce::File::userHomeDirectory);
 }
 
+float StompBoxProcessor::getEditorScale() const
+{
+    constexpr float defaultScale = 0.88f;
+    const auto v = (float) const_cast<StompBoxProcessor*> (this)->globalSettings().getDoubleValue ("editorScale", defaultScale);
+    return juce::jlimit (0.6f, 1.5f, v);
+}
+
+void StompBoxProcessor::setEditorScale (float scale)
+{
+    globalSettings().setValue ("editorScale", juce::jlimit (0.6, 1.5, (double) scale));
+}
+
 //==============================================================================
 void StompBoxProcessor::setQuality (Quality q)
 {

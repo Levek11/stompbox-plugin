@@ -59,6 +59,8 @@ public:
     void resized() override;
 
 private:
+    StompBoxProcessor& processor;
+    bool sizeRestored = false;
     stompbox::ui::StompLookAndFeel lookAndFeel;
     stompbox::ui::MainView view;
     juce::TooltipWindow tooltips { this, 600 };

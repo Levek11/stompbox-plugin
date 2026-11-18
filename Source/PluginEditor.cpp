@@ -170,7 +170,7 @@ void MainView::paint (juce::Graphics& g)
 
 //==============================================================================
 StompBoxEditor::StompBoxEditor (StompBoxProcessor& p)
-    : AudioProcessorEditor (p), view (p)
+    : AudioProcessorEditor (p), processor (p), view (p)
 {
     using MV = stompbox::ui::MainView;
     setLookAndFeel (&lookAndFeel);
@@ -179,7 +179,9 @@ StompBoxEditor::StompBoxEditor (StompBoxProcessor& p)
     setResizable (true, true);
     setResizeLimits (MV::designWidth * 6 / 10, MV::designHeight * 6 / 10, MV::designWidth * 3 / 2, MV::designHeight * 3 / 2);
     getConstrainer()->setFixedAspectRatio ((double) MV::designWidth / MV::designHeight);
-    setSize (MV::designWidth * 8 / 10, MV::designHeight * 8 / 10);
+    const float scale = p.getEditorScale();   // 88% by default, then whatever size the user last chose
+    setSize (juce::roundToInt (MV::designWidth * scale), juce::roundToInt (MV::designHeight * scale));
+    sizeRestored = true;
 }
 
 StompBoxEditor::~StompBoxEditor()
@@ -198,4 +200,6 @@ void StompBoxEditor::resized()
     const float scale = (float) getWidth() / (float) MV::designWidth;
     view.setBounds (0, 0, MV::designWidth, MV::designHeight);
     view.setTransform (juce::AffineTransform::scale (scale));
+    if (sizeRestored)
+        processor.setEditorScale (scale);
 }
