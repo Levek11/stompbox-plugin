@@ -20,8 +20,8 @@ namespace stompbox::dsp
              HALO   A at a dotted eighth, B at a quarter note, A leaning left
                     and B leaning right: the "halo" of interlocking echoes
 
-    SYNC follows Logic's tempo (and its tempo changes, gliding like tape);
-    FREE uses the TIME knob in milliseconds.
+    SYNC ON follows Logic's tempo (and its tempo changes, gliding like tape);
+    SYNC OFF uses the TIME knob in milliseconds.
 
     The dry signal passes untouched. Turning it off stops new input, but the
     repeats carry on and fade naturally (trails). */

@@ -148,12 +148,12 @@ void run (Check&& check)
                "Afterglow HALO: dotted eighth leans left (" + juce::String (hL, 0) + " ms), quarter leans right ("
                + juce::String (hR, 0) + " ms)");
 
-        set (v, "afterglow", "rhythm", 0.0f);   // 1/4, FREE
+        set (v, "afterglow", "rhythm", 0.0f);   // 1/4, SYNC OFF
         set (v, "afterglow", "sync", 1.0f);
         set (v, "afterglow", "time", 0.5f);
         o = impulse (p, v, 1.0, 120.0);
         const double expected = 60.0 * std::sqrt (25.0);
-        check (std::abs (peakTimeMs (o[0], 50.0, 900.0) - expected) < 2.0, "Afterglow FREE: TIME sets milliseconds (" + juce::String (expected, 0) + " ms)");
+        check (std::abs (peakTimeMs (o[0], 50.0, 900.0) - expected) < 2.0, "Afterglow SYNC OFF: TIME sets milliseconds (" + juce::String (expected, 0) + " ms)");
 
         // Trails: switch off right after the note; the echo still comes.
         set (v, "afterglow", "sync", 0.0f);

@@ -36,7 +36,7 @@ cab IR. Built for worship guitar, built in the cloud.
   Hi-Cut switch, high-headroom Volume. Oversampled.
 - **Afterglow** (HALO): stereo modulated dual echo with tape-like repeats
   (darker, saturating), RHYTHM 1/4, dotted 1/8 or HALO (both at once), SYNC to
-  Logic's tempo (incl. tempo changes) or FREE in ms, trails when switched off.
+  Logic's tempo (incl. tempo changes) with SYNC ON, or the TIME knob in ms with SYNC OFF, trails when switched off.
 - The chain is mono until a stereo pedal; after it, mono pedals run as dual
   mono and each side feeds its own Royal 30.
 
