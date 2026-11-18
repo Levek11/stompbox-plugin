@@ -287,6 +287,7 @@ void AmpCabTab::resized()
     const int total = 5 * knobW + 4 * gap;
     int x = panel.getX() + 222;
     jassert (x + total < (int) panel.getRight() - 70);
+    juce::ignoreUnused (total);
     const int y = panel.getCentreY() - (knobW + labelH) / 2 + 4;
     for (auto* k : { &volume, &treble, &bass, &cut, &master })
     {
@@ -385,7 +386,7 @@ void AmpCabTab::paint (juce::Graphics& g)
 
     // badge
     {
-        const auto font = Fonts::ui (19.0f, true);
+        const auto font = Fonts::lettering (19.0f);
         const auto badge = juce::Rectangle<float> (170.0f, 38.0f).withCentre ({ cloth.getCentreX(), cloth.getY() + 46.0f });
         g.setColour (juce::Colours::black.withAlpha (0.45f));
         g.fillRoundedRectangle (badge.translated (0.0f, 3.0f), 6.0f);

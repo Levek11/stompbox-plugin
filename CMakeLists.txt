@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(StompBox VERSION 0.2.0 LANGUAGES C CXX)
+project(StompBox VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -56,9 +56,11 @@ juce_add_plugin(StompBox
 juce_add_binary_data(StompBoxAssets
     HEADER_NAME StompBoxAssets.h
     NAMESPACE StompBoxAssets
-    SOURCES assets/fonts/Goldman-Bold.ttf)
+    SOURCES assets/fonts/Goldman-Bold.ttf assets/fonts/ArchivoBlack-Regular.ttf)
 
 set(STOMPBOX_DSP_SOURCES
+    Source/board/PedalCatalog.cpp
+    Source/board/BoardModel.cpp
     Source/dsp/Royal30.cpp
     Source/dsp/CabIR.cpp
     Source/dsp/Engine.cpp)
@@ -68,7 +70,10 @@ target_sources(StompBox PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/ui/StompLookAndFeel.cpp
-    Source/ui/AmpCabTab.cpp)
+    Source/ui/AmpCabTab.cpp
+    Source/ui/PedalPainter.cpp
+    Source/ui/PedalboardTab.cpp
+    Source/ui/PedalCloseUp.cpp)
 
 target_include_directories(StompBox PRIVATE Source)
 
@@ -92,7 +97,7 @@ target_link_libraries(StompBox
 # Headless DSP tests (run in CI on every build).
 juce_add_console_app(StompBoxDspTest PRODUCT_NAME "StompBoxDspTest")
 target_sources(StompBoxDspTest PRIVATE Tests/DspTest.cpp ${STOMPBOX_DSP_SOURCES})
-target_include_directories(StompBoxDspTest PRIVATE Source)
+target_include_directories(StompBoxDspTest PRIVATE Source Tests)
 target_compile_definitions(StompBoxDspTest PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(StompBoxDspTest

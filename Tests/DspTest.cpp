@@ -8,6 +8,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "dsp/Engine.h"
 #include "dsp/ToneStack.h"
+#include "BoardTests.h"
 
 using namespace stompbox;
 
@@ -281,6 +282,9 @@ int main (int argc, char** argv)
         run (e, z, 2);
         check (z.getMagnitude (0, n - 4800, 4800) < 1.0e-4f, "silence in -> silence out");
     }
+
+    //==========================================================================
+    boardtests::run ([] (bool ok, const juce::String& what) { check (ok, what); });
 
     //==========================================================================
     if (argc > 1)

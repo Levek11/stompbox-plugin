@@ -11,6 +11,13 @@ juce::Font Fonts::wordmark (float height)
     return juce::Font (juce::FontOptions (typeface).withHeight (height));
 }
 
+juce::Font Fonts::lettering (float height)
+{
+    static auto typeface = juce::Typeface::createSystemTypefaceFor (StompBoxAssets::ArchivoBlackRegular_ttf,
+                                                                    StompBoxAssets::ArchivoBlackRegular_ttfSize);
+    return juce::Font (juce::FontOptions (typeface).withHeight (height));
+}
+
 juce::Font Fonts::ui (float height, bool bold)
 {
     return juce::Font (juce::FontOptions (height, bold ? juce::Font::bold : juce::Font::plain));

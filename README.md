@@ -8,9 +8,24 @@ cab IR. Built for worship guitar, built in the cloud.
 
 | Step | What | Status |
 |---|---|---|
-| 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | **In this build** |
-| 2 | First pedals: Hot Rod, Golden Hour, one delay | Next |
-| 3 | Remaining pedals in batches | Later |
+| 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | Done |
+| 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | **In this build** |
+| 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | Next |
+| 3 | Overdrives: Blue Highway, Scotland, Nutrient | |
+| 4 | Compressors: Pacific 76, Silver 76, Fresh Squeeze | |
+| 5 | Time Machine, Open Sky | |
+| 6 | True Tone, Sculptor | |
+
+## The pedalboard (2a)
+
+- Small (6 slots), Medium (10, two rows of 5) or Large (14, two rows of 7).
+- Drag pedals between the shelf and the board; drop on an occupied slot and the
+  others slide over if there's room. 2-slot pedals stay within one row.
+- Signal runs right to left, bottom row first. Cables route themselves; after
+  a stereo pedal they're doubled (L and R).
+- Click a pedal for its close-up; the footswitch toggles it on the board.
+- Everything is saved with the Logic project. Pedals pass audio through
+  unchanged until their sound arrives (step noted in each close-up).
 
 ## What's in step 1
 
@@ -59,8 +74,9 @@ Source/dsp/ToneStack.h   Top Boost tone stack
 Source/dsp/Royal30.*     one amp, and the dual-amp pair
 Source/dsp/CabIR.*       IR loading, state storage, zero-latency convolution
 Source/dsp/Engine.*      full chain: oversampling -> amps -> cab -> output
-Source/ui/               look and feel, Amp/Cab tab
+Source/board/            pedal catalog and board model (slots, order, state)
+Source/ui/               look and feel, Amp/Cab tab, Pedalboard tab, close-up
 Tests/DspTest.cpp        headless checks, run in CI
 ```
 
-The Goldman font is bundled under the SIL Open Font License (`assets/fonts`).
+The Goldman and Archivo Black fonts are bundled under the SIL Open Font License (`assets/fonts`).

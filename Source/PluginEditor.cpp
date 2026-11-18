@@ -33,37 +33,7 @@ void SegmentButton::paintButton (juce::Graphics& g, bool over, bool)
 }
 
 //==============================================================================
-void PedalboardTab::paint (juce::Graphics& g)
-{
-    const auto r = getLocalBounds().toFloat();
-
-    // Rug
-    g.setColour (juce::Colour (0xff7d3632));
-    g.fillAll();
-    g.setColour (colours::accent);
-    g.fillRoundedRectangle (r.reduced (40.0f), 18.0f);
-
-    // Dark wood board
-    const auto board = juce::Rectangle<float> (820.0f, 300.0f).withCentre (r.getCentre());
-    g.setColour (juce::Colours::black.withAlpha (0.4f));
-    g.fillRoundedRectangle (board.translated (0.0f, 10.0f), 14.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff4a3020), 0.0f, board.getY(),
-                                             juce::Colour (0xff3a2416), 0.0f, board.getBottom(), false));
-    g.fillRoundedRectangle (board, 14.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.12f));
-    for (float y = board.getY() + 10.0f; y < board.getBottom() - 6.0f; y += 7.0f)
-        g.drawHorizontalLine ((int) y, board.getX() + 10.0f, board.getRight() - 10.0f);
-
-    g.setColour (colours::text);
-    g.setFont (Fonts::ui (18.0f, true));
-    g.drawText ("The pedalboard arrives in build step 2", board.withTrimmedBottom (40.0f), juce::Justification::centred);
-    g.setColour (colours::textSoft);
-    g.setFont (Fonts::ui (13.0f));
-    g.drawText ("For now your guitar goes straight into the two Royal 30s.", board.withTrimmedTop (30.0f), juce::Justification::centred);
-}
-
-//==============================================================================
-MainView::MainView (StompBoxProcessor& p) : processor (p), ampCab (p)
+MainView::MainView (StompBoxProcessor& p) : processor (p), pedalboard (p), ampCab (p)
 {
     for (auto* b : { (juce::Button*) &pedalboardTab, (juce::Button*) &ampTab })
     {
@@ -81,9 +51,38 @@ MainView::MainView (StompBoxProcessor& p) : processor (p), ampCab (p)
     addAndMakeVisible (studioButton);
     updateQualityButtons();
 
+    for (int i = 0; i < 3; ++i)
+    {
+        sizeButtons[i].onClick = [this, i] { setBoardSize (i); };
+        addChildComponent (sizeButtons[i]);
+    }
+    sizeButtons[0].setTooltip ("Small board: 6 slots in one row");
+    sizeButtons[1].setTooltip ("Medium board: 10 slots, two rows of 5");
+    sizeButtons[2].setTooltip ("Large board: 14 slots, two rows of 7");
+    updateBoardSizeButtons();
+
     addChildComponent (pedalboard);
     addChildComponent (ampCab);
-    showTab (1);   // Build step 1: the amp is what's here
+    showTab (0);
+}
+
+void MainView::updateBoardSizeButtons()
+{
+    const int current = (int) processor.getBoard().getSize();
+    for (int i = 0; i < 3; ++i)
+        sizeButtons[i].setToggleState (i == current, juce::dontSendNotification);
+}
+
+void MainView::setBoardSize (int size)
+{
+    const int sentBack = processor.editBoard ([size] (stompbox::board::BoardModel& b)
+    {
+        return b.setSize ((stompbox::board::BoardModel::Size) size);
+    });
+    updateBoardSizeButtons();
+    if (sentBack > 0)
+        pedalboard.showNote (juce::String (sentBack) + (sentBack == 1 ? " pedal didn't fit and went back to the shelf"
+                                                                     : " pedals didn't fit and went back to the shelf"));
 }
 
 void MainView::showTab (int index)
@@ -92,6 +91,9 @@ void MainView::showTab (int index)
     ampTab.setToggleState (index == 1, juce::dontSendNotification);
     pedalboard.setVisible (index == 0);
     ampCab.setVisible (index == 1);
+    for (auto& b : sizeButtons) b.setVisible (index == 0);
+    updateBoardSizeButtons();
+    repaint();
 }
 
 void MainView::updateQualityButtons()
@@ -114,6 +116,11 @@ void MainView::resized()
     auto seg = header.removeFromRight (24 + 136).withTrimmedRight (24).withSizeKeepingCentre (136, 36).reduced (3);
     liveButton.setBounds (seg.removeFromLeft (seg.getWidth() / 2));
     studioButton.setBounds (seg);
+
+    header.removeFromRight (20);
+    auto sizes = header.removeFromRight (216).withSizeKeepingCentre (216, 36).reduced (3);
+    for (auto& b : sizeButtons)
+        b.setBounds (sizes.removeFromLeft (70));
 
     pedalboard.setBounds (r);
     ampCab.setBounds (r);
@@ -138,13 +145,25 @@ void MainView::paint (juce::Graphics& g)
     g.setColour (colours::text);
     drawTracked (g, "BOX", font, tracking, area.withTrimmedLeft (stompWidth), juce::Justification::left);
 
-    // Segment track
-    const auto seg = juce::Rectangle<float> ((float) liveButton.getX() - 3.0f, (float) liveButton.getY() - 3.0f,
-                                             (float) (studioButton.getRight() - liveButton.getX()) + 6.0f, (float) liveButton.getHeight() + 6.0f);
-    g.setColour (colours::card);
-    g.fillRoundedRectangle (seg, 8.0f);
-    g.setColour (colours::cardBorder);
-    g.drawRoundedRectangle (seg.reduced (0.5f), 8.0f, 1.0f);
+    // Segment tracks
+    auto track = [&] (juce::Component& first, juce::Component& last)
+    {
+        const auto r = juce::Rectangle<float> ((float) first.getX() - 3.0f, (float) first.getY() - 3.0f,
+                                               (float) (last.getRight() - first.getX()) + 6.0f, (float) first.getHeight() + 6.0f);
+        g.setColour (colours::card);
+        g.fillRoundedRectangle (r, 8.0f);
+        g.setColour (colours::cardBorder);
+        g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
+    };
+    track (liveButton, studioButton);
+    if (sizeButtons[0].isVisible())
+    {
+        track (sizeButtons[0], sizeButtons[2]);
+        g.setColour (colours::muted);
+        drawTracked (g, "BOARD", Fonts::ui (11.0f), 0.08f,
+                     juce::Rectangle<float> ((float) sizeButtons[0].getX() - 60.0f, 0.0f, 48.0f, (float) headerHeight),
+                     juce::Justification::right);
+    }
 }
 
 } // namespace stompbox::ui
@@ -160,7 +179,7 @@ StompBoxEditor::StompBoxEditor (StompBoxProcessor& p)
     setResizable (true, true);
     setResizeLimits (MV::designWidth * 6 / 10, MV::designHeight * 6 / 10, MV::designWidth * 3 / 2, MV::designHeight * 3 / 2);
     getConstrainer()->setFixedAspectRatio ((double) MV::designWidth / MV::designHeight);
-    setSize (MV::designWidth * 85 / 100, MV::designHeight * 85 / 100);
+    setSize (MV::designWidth * 8 / 10, MV::designHeight * 8 / 10);
 }
 
 StompBoxEditor::~StompBoxEditor()

@@ -101,7 +101,7 @@ private:
     CabCard cabCard;
     OutputCard outputCard;
 
-    static constexpr int asideWidth = 340;
+    static constexpr int asideWidth = 360;
 };
 
 } // namespace stompbox::ui

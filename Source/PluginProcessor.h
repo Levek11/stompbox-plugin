@@ -4,6 +4,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "dsp/Engine.h"
 #include "Parameters.h"
+#include "board/BoardModel.h"
 
 class StompBoxProcessor : public juce::AudioProcessor
 {
@@ -53,6 +54,33 @@ public:
 
     juce::File getLastIRFolder() const;
 
+    // Pedalboard (message thread). Edits go through editBoard so the version
+    // counter tells the UI (and later the audio chain) that something changed.
+    template <typename Fn>
+    auto editBoard (Fn&& fn)
+    {
+        // Bump the version and tell the host the project changed (board edits
+        // aren't automatable parameters, so Logic wouldn't notice otherwise).
+        struct Bump
+        {
+            StompBoxProcessor& p;
+            ~Bump()
+            {
+                ++p.boardVersion;
+                if (juce::MessageManager::existsAndIsCurrentThread())
+                    p.updateHostDisplay (juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged (true));
+            }
+        } bump { *this };
+        const juce::ScopedLock sl (boardLock);
+        return fn (board);
+    }
+    stompbox::board::BoardModel getBoard() const
+    {
+        const juce::ScopedLock sl (boardLock);
+        return board;
+    }
+    int getBoardVersion() const noexcept { return boardVersion.load(); }
+
 private:
     void applyIR (stompbox::IRData ir);
     juce::PropertiesFile& globalSettings();
@@ -72,6 +100,10 @@ private:
     std::atomic<int> irVersion { 0 };
 
     std::unique_ptr<juce::PropertiesFile> settings;
+
+    mutable juce::CriticalSection boardLock;
+    stompbox::board::BoardModel board;
+    std::atomic<int> boardVersion { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StompBoxProcessor)
 };

@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "ui/StompLookAndFeel.h"
 #include "ui/AmpCabTab.h"
+#include "ui/PedalboardTab.h"
 
 namespace stompbox::ui
 {
@@ -21,18 +22,11 @@ struct SegmentButton : juce::Button
     void paintButton (juce::Graphics&, bool over, bool down) override;
 };
 
-/** Pedalboard tab: arrives in build step 2. */
-class PedalboardTab : public juce::Component
-{
-public:
-    void paint (juce::Graphics&) override;
-};
-
 /** Everything inside the window, laid out at a fixed design size and scaled. */
 class MainView : public juce::Component
 {
 public:
-    static constexpr int designWidth = 1280, designHeight = 800, headerHeight = 64;
+    static constexpr int designWidth = 1440, designHeight = 900, headerHeight = 64;
 
     explicit MainView (StompBoxProcessor&);
     void paint (juce::Graphics&) override;
@@ -41,10 +35,13 @@ public:
 private:
     void showTab (int index);
     void updateQualityButtons();
+    void updateBoardSizeButtons();
+    void setBoardSize (int size);
 
     StompBoxProcessor& processor;
     TabButton pedalboardTab { "Pedalboard" }, ampTab { "Amp / Cab" };
     SegmentButton liveButton { "Live" }, studioButton { "Studio" };
+    SegmentButton sizeButtons[3] { SegmentButton { "Small" }, SegmentButton { "Medium" }, SegmentButton { "Large" } };
     PedalboardTab pedalboard;
     AmpCabTab ampCab;
 };

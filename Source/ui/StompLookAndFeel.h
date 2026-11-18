@@ -33,6 +33,7 @@ struct Fonts
     static juce::Font wordmark (float height);
     static juce::Font ui (float height, bool bold = false);
     static juce::Font label (float height);   // small caps-style panel labels
+    static juce::Font lettering (float height); // pedal names and the ROYAL 30 badge (Archivo Black, OFL)
 };
 
 /** Draws text with extra letter spacing (tracking as a fraction of font height). */

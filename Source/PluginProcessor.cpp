@@ -138,11 +138,13 @@ void StompBoxProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.removeChild (state.getChildWithName (IRData::treeType), nullptr);
+    state.removeChild (state.getChildWithName (board::BoardModel::treeType), nullptr);
     {
         const juce::ScopedLock sl (irLock);
         if (currentIR.isValid())
             state.appendChild (currentIR.toValueTree(), nullptr);
     }
+    state.appendChild (getBoard().toValueTree(), nullptr);
     state.setProperty ("stateVersion", 1, nullptr);
 
     if (auto xml = state.createXml())
@@ -158,9 +160,12 @@ void StompBoxProcessor::setStateInformation (const void* data, int sizeInBytes)
     auto tree = juce::ValueTree::fromXml (*xml);
     auto irTree = tree.getChildWithName (IRData::treeType);
     tree.removeChild (irTree, nullptr);
+    auto boardTree = tree.getChildWithName (board::BoardModel::treeType);
+    tree.removeChild (boardTree, nullptr);
 
     apvts.replaceState (tree);
     applyIR (IRData::fromValueTree (irTree));
+    editBoard ([&] (board::BoardModel& b) { b.fromValueTree (boardTree); });
 }
 
 //==============================================================================
