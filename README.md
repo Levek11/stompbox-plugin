@@ -10,8 +10,8 @@ cab IR. Built for worship guitar, built in the cloud.
 |---|---|---|
 | 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | Done |
 | 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | Done |
-| 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | **In this build** |
-| 3 | Overdrives: Blue Highway, Scotland, Nutrient | |
+| 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | Done |
+| 3 | Overdrives: Blue Highway, Scotland, Nutrient | **In this build** |
 | 4 | Compressors: Pacific 76, Silver 76, Fresh Squeeze | |
 | 5 | Time Machine, Open Sky | |
 | 6 | True Tone, Sculptor | |
@@ -39,6 +39,12 @@ cab IR. Built for worship guitar, built in the cloud.
   (dotted eighth left, quarter right) and always synced to Logic's tempo
   (incl. tempo changes). Tape-like repeats; TONE makes them darker or brighter
   (1 kHz to 8.75 kHz); trails when switched off.
+- **Blue Highway** (BD-2): two cascaded soft-clipping gain stages on one
+  GAIN knob, a big pre-clipping bass boost (fuzzy, touch-sensitive), wide TONE.
+- **Scotland** (Kilt V2): op-amp drive whose G1 / G2 toggles step from boost
+  and overdrive (G1) to fuzz (G2) to gated fuzz (both); TONE, CUT/FLAT, VOLUME.
+- **Nutrient** (Protein V4): Green (right, ODR-1 style) into Blue (left,
+  Bluesbreaker style), a footswitch each; Blue has the 3-way HI-CUT.
 - The chain is mono until a stereo pedal; after it, mono pedals run as dual
   mono and each side feeds its own Royal 30.
 

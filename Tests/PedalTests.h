@@ -231,6 +231,106 @@ void run (Check&& check)
         check (finite && peak < 8.0f, "Afterglow: full feedback + tempo changes stays bounded (peak " + juce::String (peak, 2) + ")");
     }
 
+    // --- Batch 3 ----------------------------------------------------------------
+    auto unityDb = [] (Pedal& p, std::vector<float> v)
+    {
+        const double fs = 48000.0;
+        p.prepare (fs, 256);
+        const int n = (int) fs;
+        std::vector<float> buf ((size_t) n);
+        for (int i = 0; i < n; ++i) buf[(size_t) i] = (float) (0.3 * std::sin (2.0 * pi * 220.0 * i / fs));
+        double inSq = 0, outSq = 0;
+        for (int i = n / 2; i < n; ++i) inSq += (double) buf[(size_t) i] * buf[(size_t) i];
+        for (int i = 0; i < n; i += 256) { float* ch[1] = { buf.data() + i }; p.process (ch, 1, std::min (256, n - i), v.data(), true, {}); }
+        for (int i = n / 2; i < n; ++i) outSq += (double) buf[(size_t) i] * buf[(size_t) i];
+        return 10.0 * std::log10 (outSq / inSq);
+    };
+    auto bypassExact = [] (Pedal& p, std::vector<float> v)
+    {
+        std::vector<float> buf (512, 0.123f);
+        float* ch[1] = { buf.data() };
+        p.prepare (48000.0, 512);
+        p.process (ch, 1, 512, v.data(), false, {});
+        return buf[100] == 0.123f && buf[511] == 0.123f;
+    };
+
+    {
+        BlueHighway p; auto v = defaults ("blueHighway");
+        set (v, "blueHighway", "GAIN", 0.0f); const double t0 = thd (p, v, 0.3);
+        set (v, "blueHighway", "GAIN", 0.5f); const double t5 = thd (p, v, 0.3);
+        set (v, "blueHighway", "GAIN", 1.0f); const double t10 = thd (p, v, 0.3);
+        std::cout << "    Blue Highway THD at Gain 0 / 5 / 10: " << juce::String (t0, 1) << "% / " << juce::String (t5, 1)
+                  << "% / " << juce::String (t10, 1) << "%\n";
+        check (t0 < t5 && t5 < t10 && t10 > 15.0, "Blue Highway: more Gain = more drive, up to fuzzy");
+        // Touch sensitivity: soft picking cleaner than hard picking at the same setting
+        auto w = defaults ("blueHighway");
+        const double soft = thd (p, w, 0.05), hard = thd (p, w, 0.5);
+        check (hard > soft * 2.0, "Blue Highway: touch-sensitive (soft " + juce::String (soft, 1) + "%, hard " + juce::String (hard, 1) + "%)");
+        const double db = unityDb (p, defaults ("blueHighway"));
+        check (db > -8.0 && db < 8.0 && bypassExact (p, defaults ("blueHighway")),
+               "Blue Highway: default level " + juce::String (db, 1) + " dB, off = untouched");
+    }
+
+    {
+        Scotland p; auto v = defaults ("scotland");
+        const double stock = thd (p, v, 0.3);
+        set (v, "scotland", "g1", 0.0f); const double od = thd (p, v, 0.3);
+        set (v, "scotland", "g1", 1.0f); set (v, "scotland", "g2", 0.0f); const double fuzz = thd (p, v, 0.3);
+        std::cout << "    Scotland THD stock / G1 / G2: " << juce::String (stock, 1) << "% / " << juce::String (od, 1)
+                  << "% / " << juce::String (fuzz, 1) << "%\n";
+        check (stock < od && od < fuzz, "Scotland: G1 adds overdrive, G2 goes into fuzz");
+
+        // Both up = gated: a very quiet signal is choked off, unlike G2 alone.
+        auto quietRms = [&] (std::vector<float> w)
+        {
+            p.prepare (48000.0, 256);
+            const int n = 48000; std::vector<float> buf ((size_t) n);
+            for (int i = 0; i < n; ++i) buf[(size_t) i] = (float) (0.004 * std::sin (2.0 * pi * 220.0 * i / 48000.0));
+            for (int i = 0; i < n; i += 256) { float* ch[1] = { buf.data() + i }; p.process (ch, 1, std::min (256, n - i), w.data(), true, {}); }
+            double e = 0; for (int i = n / 2; i < n; ++i) e += (double) buf[(size_t) i] * buf[(size_t) i];
+            return std::sqrt (e / (n / 2));
+        };
+        auto gated = v; set (gated, "scotland", "g1", 0.0f);
+        const double open = quietRms (v), closed = quietRms (gated);
+        check (closed < open * 0.25, "Scotland: G1 + G2 gates quiet notes (" + juce::String (20.0 * std::log10 (closed / open + 1e-12), 1) + " dB)");
+
+        const double db = unityDb (p, defaults ("scotland"));
+        check (db > -8.0 && db < 8.0 && bypassExact (p, defaults ("scotland")),
+               "Scotland: default level " + juce::String (db, 1) + " dB, off = untouched");
+    }
+
+    {
+        Nutrient p; auto v = defaults ("nutrient");
+        auto run = [&] (bool blue, bool green, float amp)
+        {
+            p.setSecondFootswitch (green);
+            const double fs = 48000.0; p.prepare (fs, 256);
+            const int n = (int) fs; std::vector<float> buf ((size_t) n);
+            for (int i = 0; i < n; ++i) buf[(size_t) i] = (float) (amp * std::sin (2.0 * pi * 220.0 * i / fs));
+            for (int i = 0; i < n; i += 256) { float* ch[1] = { buf.data() + i }; p.process (ch, 1, std::min (256, n - i), v.data(), blue, {}); }
+            return buf;
+        };
+        auto thdOf = [] (const std::vector<float>& buf)
+        {
+            const double fs = 48000.0; const int n = (int) buf.size();
+            auto g = [&] (double f)
+            {
+                const double w = 2.0 * pi * f / fs, c = 2.0 * std::cos (w); double s1 = 0, s2 = 0;
+                for (int i = n / 2; i < n / 2 + (int) (fs / 220.0) * 80; ++i) { const double s0 = buf[(size_t) i] + c * s1 - s2; s2 = s1; s1 = s0; }
+                return std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2));
+            };
+            double h = 0; for (int k = 2; k <= 10; ++k) { const double m = g (220.0 * k); h += m * m; }
+            return 100.0 * std::sqrt (h) / (g (220.0) + 1e-12);
+        };
+        const double green = thdOf (run (false, true, 0.3)), blue = thdOf (run (true, false, 0.3)), both = thdOf (run (true, true, 0.3));
+        std::cout << "    Nutrient THD Green / Blue / both: " << juce::String (green, 1) << "% / " << juce::String (blue, 1)
+                  << "% / " << juce::String (both, 1) << "%\n";
+        check (green > 1.0 && blue > 1.0 && both > green && both > blue, "Nutrient: each side drives on its own; stacked drives harder");
+        const auto off = run (false, false, 0.3);
+        check (std::abs (off[30000] - (float) (0.3 * std::sin (2.0 * pi * 220.0 * 30000 / 48000.0))) < 1.0e-6f,
+               "Nutrient: both footswitches off = untouched");
+    }
+
     // --- Chain ------------------------------------------------------------------
     std::cout << "\nPedal chain\n";
     {

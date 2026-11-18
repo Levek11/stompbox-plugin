@@ -9,12 +9,13 @@ using D = PedalDef::Decor;
 
 static constexpr std::uint32_t cream = 0xffefe9dc, dark = 0xff161618, light = 0xfff4f1ea, silver = 0xffd9dcdf;
 
-static std::vector<ControlDef> threeKnobBoss (const char* a, const char* b, const char* c)
+static std::vector<ControlDef> threeKnobBoss (const char* a, const char* b, const char* c,
+                                              float da = 0.5f, float db = 0.5f, float dc = 0.5f)
 {
     // Two large knobs on top, the smaller one centred below (mockup layout).
-    return { { a, a, K::knob, 25.0f, 22.0f, 28.0f, 0.5f },
-             { b, b, K::knob, 87.0f, 22.0f, 28.0f, 0.5f },
-             { c, c, K::knob, 56.0f, 48.0f, 20.0f, 0.5f } };
+    return { { a, a, K::knob, 25.0f, 22.0f, 28.0f, da },
+             { b, b, K::knob, 87.0f, 22.0f, 28.0f, db },
+             { c, c, K::knob, 56.0f, 48.0f, 20.0f, dc } };
 }
 
 static std::vector<ControlDef> bigDigital (const char* const top[4], const char* const bottom[4])
@@ -43,18 +44,18 @@ static std::vector<PedalDef> build()
                      { "tone",   "TONE",   K::knob, 88.0f, 58.0f, 24.0f, 0.35f },
                      { "hicut",  "HI-CUT", K::toggle, 56.0f, 58.0f, 11.0f, 1.0f, 2, dark, light, "ON|OFF" } } });
 
-    v.push_back ({ "scotland", "SCOTLAND", "OVERDRIVE", "JHS Kilt",
-                   0xffbfc1c3, 0xff1e1e1e, 1, false, 1, 90.0f, 12.0f, D::none, "", 0, 3,
-                   { { "volume", "VOLUME", K::knob, 22.0f, 26.0f, 22.0f, 0.5f },
-                     { "gain",   "GAIN",   K::knob, 90.0f, 26.0f, 22.0f, 0.4f },
-                     { "tone",   "TONE",   K::knob, 22.0f, 64.0f, 22.0f, 0.5f },
-                     { "mode",   "MODE",   K::toggle, 50.0f, 30.0f, 12.0f, 0.0f, 2, dark, light, "OD|FUZZ" },
-                     { "range",  "RANGE",  K::toggle, 61.0f, 47.0f, 12.0f, 0.0f, 2, dark, light, "HI|LO" },
-                     { "bass",   "BASS",   K::toggle, 72.0f, 64.0f, 12.0f, 0.0f, 2, dark, light, "FULL|CUT" } } });
+    v.push_back ({ "scotland", "SCOTLAND", "OVERDRIVE", "JHS Kilt V2",
+                   0xffbfc1c3, 0xff1e1e1e, 1, false, 1, 90.0f, 12.0f, D::none, "", 0, 0,
+                   { { "volume",  "VOLUME",   K::knob, 22.0f, 26.0f, 22.0f, 0.5f },
+                     { "gain",    "GAIN",     K::knob, 90.0f, 26.0f, 22.0f, 0.4f },
+                     { "tone",    "TONE",     K::knob, 22.0f, 64.0f, 22.0f, 0.5f },
+                     { "g1",      "G1",       K::toggle, 50.0f, 30.0f, 12.0f, 1.0f, 2, dark, light, "ON|OFF" },
+                     { "g2",      "G2",       K::toggle, 61.0f, 47.0f, 12.0f, 1.0f, 2, dark, light, "ON|OFF" },
+                     { "cutflat", "CUT/FLAT", K::toggle, 72.0f, 64.0f, 12.0f, 1.0f, 2, dark, light, "CUT|FLAT" } } });
 
     v.push_back ({ "blueHighway", "BLUE\nHIGHWAY", "OVERDRIVE", "Boss BD-2 Blues Driver",
-                   0xff246a9b, light, 1, false, 1, 82.0f, 12.0f, D::none, "", 0, 3,
-                   threeKnobBoss ("LEVEL", "GAIN", "TONE") });
+                   0xff246a9b, light, 1, false, 1, 82.0f, 12.0f, D::none, "", 0, 0,
+                   threeKnobBoss ("LEVEL", "GAIN", "TONE", 0.5f, 0.3f, 0.5f) });
 
     v.push_back ({ "hotRod", "HOT\nROD", "OVERDRIVE", "Boss SD-1 Super OverDrive",
                    0xffebc45b, 0xff1e1e1e, 1, false, 1, 82.0f, 12.0f, D::none, "", 0, 0,
@@ -79,15 +80,17 @@ static std::vector<PedalDef> build()
                      { "ratio",   "RATIO",   K::knob, 82.0f, 46.0f, 20.0f, 0.3f } } });
 
     {
-        PedalDef p { "nutrient", "NUTRIENT", "OVERDRIVE", "Browne Protein",
-                     0xff626f4b, 0xfff1ede5, 2, false, 2, 86.0f, 13.0f, D::none, "", 0, 3, {} };
+        // Left half = Blue (Bluesbreaker style), right half = Green (Nobels ODR-1
+        // style). Signal runs right to left, so Green feeds Blue, as on the real pedal.
+        PedalDef p { "nutrient", "NUTRIENT", "OVERDRIVE", "Browne Protein Dual Overdrive V4",
+                     0xff626f4b, 0xfff1ede5, 2, false, 2, 86.0f, 13.0f, D::none, "", 0, 0, {} };
         p.controls = { { "volA",  "VOLUME", K::knob, 38.0f,  26.0f, 18.0f, 0.5f, 1, silver, dark },
-                       { "gainA", "DRIVE",  K::knob, 94.0f,  26.0f, 18.0f, 0.4f, 1, silver, dark },
-                       { "volB",  "VOLUME", K::knob, 146.0f, 26.0f, 18.0f, 0.5f, 1, silver, dark },
-                       { "gainB", "DRIVE",  K::knob, 202.0f, 26.0f, 18.0f, 0.6f, 1, silver, dark },
+                       { "gainA", "GAIN",   K::knob, 94.0f,  26.0f, 18.0f, 0.4f, 1, silver, dark },
+                       { "volB",  "LEVEL",  K::knob, 146.0f, 26.0f, 18.0f, 0.5f, 1, silver, dark },
+                       { "gainB", "DRIVE",  K::knob, 202.0f, 26.0f, 18.0f, 0.4f, 1, silver, dark },
                        { "toneA", "TONE",   K::knob, 63.0f,  53.0f, 12.0f, 0.5f },
                        { "toneB", "TONE",   K::knob, 175.0f, 53.0f, 12.0f, 0.5f },
-                       { "order", "ORDER",  K::toggle, 29.0f, 55.0f, 12.0f, 0.0f, 2, dark, light, "A>B|B>A" } };
+                       { "hicut", "HI-CUT", K::toggle, 29.0f, 55.0f, 12.0f, 0.0f, 3, dark, light, "OPEN|MID|DARK" } };
         v.push_back (p);
     }
 
@@ -110,7 +113,7 @@ static std::vector<PedalDef> build()
     // --- Row 4: delay, utilities, 1176 -------------------------------------------
     v.push_back ({ "afterglow", "AFTERGLOW", "DELAY", "Keeley HALO Dual Echo",
                    0xff292a2c, light, 1, true, 1, 83.0f, 12.0f, D::none, "", 0, 0,
-                   { { "tone",    "TONE",    K::knob, 23.0f, 20.0f, 24.0f, 0.6f, 1, cream, dark },
+                   { { "tone",    "TONE",    K::knob, 23.0f, 20.0f, 24.0f, 0.4f, 1, cream, dark },
                      { "repeats", "FDBK",    K::knob, 89.0f, 20.0f, 24.0f, 0.40f, 1, cream, dark },
                      { "mix",     "LEVEL",   K::knob, 56.0f, 32.0f, 24.0f, 0.40f, 1, cream, dark },
                      { "rate",    "RATE",    K::knob, 23.0f, 56.0f, 24.0f, 0.25f, 1, cream, dark },

@@ -18,11 +18,15 @@ Engine::Engine()
     pedals[(size_t) board::indexOf ("hotRod")]     = std::make_unique<dsp::HotRod>();
     pedals[(size_t) board::indexOf ("goldenHour")] = std::make_unique<dsp::GoldenHour>();
     pedals[(size_t) board::indexOf ("afterglow")]  = std::make_unique<dsp::Afterglow>();
+    pedals[(size_t) board::indexOf ("blueHighway")] = std::make_unique<dsp::BlueHighway>();
+    pedals[(size_t) board::indexOf ("scotland")]   = std::make_unique<dsp::Scotland>();
+    pedals[(size_t) board::indexOf ("nutrient")]   = std::make_unique<dsp::Nutrient>();
 
     const auto& cat = board::catalog();
     for (size_t i = 0; i < cat.size(); ++i)
     {
         pedalOn[i].store (true);
+        pedalOnB[i].store (true);
         for (size_t k = 0; k < cat[i].controls.size() && k < 16; ++k)
             pedalValues[i][k].store (cat[i].controls[k].defaultValue);
     }
@@ -35,6 +39,7 @@ void Engine::setBoard (const board::BoardModel& b)
     {
         const auto& st = b.pedal (i);
         pedalOn[(size_t) i].store (st.on);
+        pedalOnB[(size_t) i].store (st.onB);
         for (size_t k = 0; k < cat[(size_t) i].controls.size() && k < 16; ++k)
             pedalValues[(size_t) i][k].store (st.values[k]);
     }
@@ -137,6 +142,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, int numInputChannels, bo
             procChannels = 2;
         }
         for (int v = 0; v < 16; ++v) values[v] = pedalValues[(size_t) idx][(size_t) v].load (std::memory_order_relaxed);
+        pedal->setSecondFootswitch (pedalOnB[(size_t) idx].load (std::memory_order_relaxed));
         pedal->process (buffer.getArrayOfWritePointers(), procChannels, numSamples, values,
                         pedalOn[(size_t) idx].load (std::memory_order_relaxed), context);
     }

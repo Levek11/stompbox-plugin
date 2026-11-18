@@ -24,7 +24,7 @@ namespace stompbox::dsp
 struct Royal30Settings
 {
     bool topBoost = true;
-    float volume = 0.4f;   // all knobs 0..1 (shown as 0..10)
+    float volume = 0.6f;   // all knobs 0..1 (shown as 0..10)
     float treble = 0.6f;
     float bass   = 0.3f;
     float cut    = 0.3f;

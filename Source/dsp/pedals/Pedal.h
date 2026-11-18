@@ -28,6 +28,9 @@ public:
     virtual void prepare (double sampleRate, int maxBlock) = 0;
     virtual void reset() = 0;
 
+    /** Dual pedals: the second footswitch (called before process each block). */
+    virtual void setSecondFootswitch (bool) noexcept {}
+
     /** Stereo pedals turn a mono chain into a stereo one from here on. */
     virtual bool isStereo() const noexcept { return false; }
 

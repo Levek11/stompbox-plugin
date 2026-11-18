@@ -69,7 +69,7 @@ private:
     // --- Pedal chain ------------------------------------------------------
     std::array<std::unique_ptr<dsp::Pedal>, (size_t) board::numPedals> pedals;
     std::array<std::array<std::atomic<float>, 16>, (size_t) board::numPedals> pedalValues;
-    std::array<std::atomic<bool>, (size_t) board::numPedals> pedalOn;
+    std::array<std::atomic<bool>, (size_t) board::numPedals> pedalOn, pedalOnB;
 
     struct Chain { int count = 0; std::array<int, (size_t) board::numPedals> order {}; };
     juce::SpinLock chainLock;

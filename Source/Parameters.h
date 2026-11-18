@@ -33,7 +33,7 @@ namespace stompbox::params
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { channel, version }, "Channel", juce::StringArray { "Normal", "Top Boost" }, 1));
 
-        layout.add (makeKnob (volume, "Volume", 0.4f));
+        layout.add (makeKnob (volume, "Volume", 0.6f));
         layout.add (makeKnob (treble, "Treble", 0.6f));
         layout.add (makeKnob (bass,   "Bass",   0.3f));
         layout.add (makeKnob (cut,    "Cut",    0.3f));
