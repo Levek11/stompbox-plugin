@@ -38,9 +38,19 @@ juce::Result IRData::loadFromFile (const juce::File& file, IRData& out)
     return juce::Result::ok();
 }
 
-juce::ValueTree IRData::toValueTree() const
+bool IRData::sameAs (const IRData& o) const
 {
-    juce::ValueTree t (treeType);
+    if (sampleRate != o.sampleRate || samples.getNumSamples() != o.samples.getNumSamples() || isValid() != o.isValid())
+        return false;
+    for (int i = 0; i < samples.getNumSamples(); ++i)
+        if (samples.getSample (0, i) != o.samples.getSample (0, i))
+            return false;
+    return true;
+}
+
+juce::ValueTree IRData::toValueTree (const juce::Identifier& type) const
+{
+    juce::ValueTree t (type);
     if (! isValid())
         return t;
 
@@ -63,10 +73,10 @@ juce::ValueTree IRData::toValueTree() const
     return t;
 }
 
-IRData IRData::fromValueTree (const juce::ValueTree& t)
+IRData IRData::fromValueTree (const juce::ValueTree& t, const juce::Identifier& type)
 {
     IRData ir;
-    if (! t.hasType (treeType))
+    if (! t.hasType (type))
         return ir;
 
     const int n = (int) t.getProperty ("numSamples", 0);
@@ -109,9 +119,67 @@ std::vector<float> IRData::overview (int buckets) const
 }
 
 //==============================================================================
+static int onsetIndex (const juce::AudioBuffer<float>& b)
+{
+    const int n = b.getNumSamples();
+    const float peak = b.getMagnitude (0, 0, n);
+    for (int i = 0; i < n; ++i)
+        if (std::abs (b.getSample (0, i)) >= 0.1f * peak)
+            return i;
+    return 0;
+}
+
+static void trimFront (IRData& ir, int count)
+{
+    count = juce::jlimit (0, ir.samples.getNumSamples() - 1, count);
+    if (count == 0) return;
+    juce::AudioBuffer<float> t (1, ir.samples.getNumSamples() - count);
+    t.copyFrom (0, 0, ir.samples, 0, count, t.getNumSamples());
+    ir.samples = std::move (t);
+}
+
+void CabIR::alignPair (IRData& a, IRData& b)
+{
+    if (! a.isValid() || ! b.isValid())
+        return;
+
+    // 1. Both start a fraction of a millisecond before their first strong
+    //    peak (leading silence and pre-delay removed; no latency added).
+    for (auto* ir : { &a, &b })
+    {
+        const int pre = (int) std::round (0.0002 * ir->sampleRate);
+        trimFront (*ir, onsetIndex (ir->samples) - pre);
+    }
+
+    // 2. Same sample rate: refine the offset with a cross-correlation over the
+    //    first 2 ms (within +-0.5 ms), and fix inverted polarity.
+    if (a.sampleRate != b.sampleRate)
+        return;
+    const int window = juce::jmin ((int) (0.002 * a.sampleRate), a.samples.getNumSamples(), b.samples.getNumSamples());
+    const int maxLag = (int) (0.0005 * a.sampleRate);
+    const float* x = a.samples.getReadPointer (0);
+    const float* y = b.samples.getReadPointer (0);
+    double best = 0.0; int bestLag = 0;
+    for (int lag = -maxLag; lag <= maxLag; ++lag)
+    {
+        double sum = 0.0;
+        for (int i = 0; i < window; ++i)
+        {
+            const int j = i + lag;
+            if (j >= 0 && j < b.samples.getNumSamples()) sum += (double) x[i] * y[j];
+        }
+        if (std::abs (sum) > std::abs (best)) { best = sum; bestLag = lag; }
+    }
+    if (bestLag > 0) trimFront (b, bestLag);
+    else if (bestLag < 0) trimFront (a, -bestLag);
+    if (best < 0.0) b.samples.applyGain (-1.0f);
+}
+
+//==============================================================================
 void CabIR::prepare (const juce::dsp::ProcessSpec& spec)
 {
-    convolution.prepare ({ spec.sampleRate, spec.maximumBlockSize, 2 });
+    for (auto& c : conv)
+        c.prepare ({ spec.sampleRate, spec.maximumBlockSize, 1 });
 
     for (auto& f : fallback)
     {
@@ -125,15 +193,15 @@ void CabIR::prepare (const juce::dsp::ProcessSpec& spec)
 
 void CabIR::reset()
 {
-    convolution.reset();
+    for (auto& c : conv) c.reset();
     for (auto& f : fallback) { f.hp.reset(); f.lp1.reset(); f.lp2.reset(); f.presence.reset(); }
 }
 
-void CabIR::load (const IRData& ir)
+void CabIR::loadSide (int side, const IRData& ir)
 {
     if (! ir.isValid())
     {
-        clear();
+        active[(size_t) side].store (false);
         return;
     }
 
@@ -145,40 +213,51 @@ void CabIR::load (const IRData& ir)
         energy += (double) copy.getSample (0, i) * copy.getSample (0, i);
     copy.applyGain ((float) (1.0 / std::sqrt (juce::jmax (energy, 1.0e-12))));
 
-    convolution.loadImpulseResponse (std::move (copy), ir.sampleRate,
-                                     juce::dsp::Convolution::Stereo::no,
-                                     juce::dsp::Convolution::Trim::yes,
-                                     juce::dsp::Convolution::Normalise::no);
-    active.store (true);
+    conv[(size_t) side].loadImpulseResponse (std::move (copy), ir.sampleRate,
+                                             juce::dsp::Convolution::Stereo::no,
+                                             juce::dsp::Convolution::Trim::yes,
+                                             juce::dsp::Convolution::Normalise::no);
+    active[(size_t) side].store (true);
 }
 
-void CabIR::clear()
+void CabIR::load (const IRData& left, const IRData& right, bool linked)
 {
-    active.store (false);
+    IRData l = left.isValid() ? left : right;
+    IRData r = (linked || ! right.isValid()) ? l : right;
+
+    const bool different = l.isValid() && r.isValid() && ! l.sameAs (r);
+    if (different)
+        alignPair (l, r);
+
+    loadSide (0, l);
+    loadSide (1, r);
+    dual.store (different);
 }
 
 void CabIR::process (juce::dsp::AudioBlock<float> block) noexcept
 {
-    const bool useIR = active.load();
-    if (useIR != wasActive)
-    {
-        reset();
-        wasActive = useIR;
-    }
-
-    if (useIR)
-    {
-        juce::dsp::ProcessContextReplacing<float> ctx (block);
-        convolution.process (ctx);
-        return;
-    }
-
     const auto nCh = juce::jmin ((int) block.getNumChannels(), 2);
     for (int c = 0; c < nCh; ++c)
     {
+        const bool useIR = active[(size_t) c].load();
         auto& f = fallback[(size_t) c];
-        float* d = block.getChannelPointer ((size_t) c);
-        for (size_t i = 0; i < block.getNumSamples(); ++i)
+        if (useIR != wasActive[(size_t) c])
+        {
+            conv[(size_t) c].reset();
+            f.hp.reset(); f.lp1.reset(); f.lp2.reset(); f.presence.reset();
+            wasActive[(size_t) c] = useIR;
+        }
+
+        auto one = block.getSingleChannelBlock ((size_t) c);
+        if (useIR)
+        {
+            juce::dsp::ProcessContextReplacing<float> ctx (one);
+            conv[(size_t) c].process (ctx);
+            continue;
+        }
+
+        float* d = one.getChannelPointer (0);
+        for (size_t i = 0; i < one.getNumSamples(); ++i)
         {
             double x = f.hp.process (d[i]);
             x = f.lp1.process (x);

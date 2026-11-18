@@ -55,9 +55,12 @@ cab IR. Built for worship guitar, built in the cloud.
   follower, long-tailed-pair phase inverter, the Cut network across the PI
   outputs, 4 x EL84 push-pull output with rectifier sag, and no negative
   feedback (so the speaker's impedance curve shows in the response).
-- **Cab IR loader.** WAV/AIFF, same IR on both sides, zero-latency convolution.
-  The IR is saved inside the plugin state, so a Logic project keeps working if
-  the file moves. Without an IR, a basic speaker filter is used.
+- **Cab IR loader.** WAV/AIFF, zero-latency convolution. **Link L/R** on (the
+  default): one IR on both amps. Off: a different IR on the left and right
+  amps; two different IRs are lined up automatically (start time and
+  polarity) so the guitar stays full when the mix is summed to mono. IRs are
+  saved inside the plugin state, so a Logic project keeps working if the
+  files move. Without an IR, a basic speaker filter is used.
 - **Zero latency.** No lookahead anywhere; reports 0 samples to Logic.
 - **Live / Studio.** Live runs the amps at 2x oversampling, Studio at 4x.
   Offline bounces always use Studio. Remembered globally, not per project.

@@ -41,10 +41,12 @@ public:
     //==============================================================================
     juce::AudioProcessorValueTreeState apvts;
 
-    // Cab IR (message thread)
-    juce::Result loadIRFile (const juce::File& file);
-    void clearIR();
-    stompbox::IRData getIR() const;
+    // Cab IRs (message thread). side 0 = left (or both, when linked), 1 = right.
+    juce::Result loadIRFile (const juce::File& file, int side = 0);
+    void clearIR (int side = 0);
+    stompbox::IRData getIR (int side = 0) const;
+    bool isCabLinked() const;
+    void setCabLinked (bool linked);
     int getIRVersion() const noexcept { return irVersion.load(); }
 
     // Live/Studio: a global setting, remembered across instances and projects.
@@ -88,7 +90,7 @@ public:
     int getBoardVersion() const noexcept { return boardVersion.load(); }
 
 private:
-    void applyIR (stompbox::IRData ir);
+    void applyIRs();
     juce::PropertiesFile& globalSettings();
 
     stompbox::Engine engine;
@@ -102,7 +104,8 @@ private:
     std::atomic<float>* pOutput = nullptr;
 
     mutable juce::CriticalSection irLock;
-    stompbox::IRData currentIR;
+    std::array<stompbox::IRData, 2> irs;
+    bool cabLinked = true;
     std::atomic<int> irVersion { 0 };
 
     std::unique_ptr<juce::PropertiesFile> settings;

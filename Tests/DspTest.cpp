@@ -197,6 +197,64 @@ int main (int argc, char** argv)
     }
 
     //==========================================================================
+    std::cout << "\nDual cab (Link L/R off)\n";
+    {
+        // Two "cabs": the same burst, but B starts 60 samples later and is
+        // inverted. Unaligned, they'd largely cancel when summed to mono.
+        auto burst = [&] (int offset, float polarity)
+        {
+            IRData ir; ir.name = "b"; ir.sampleRate = fs; ir.samples.setSize (1, 4800); ir.samples.clear();
+            juce::Random rng (7);
+            dsp::Biquad lp; lp.setLowpass (5000, 0.7, fs);
+            for (int i = 0; i < 2400; ++i)
+                ir.samples.setSample (0, offset + i, polarity * (float) lp.process ((rng.nextFloat() * 2 - 1) * std::exp (-i / 200.0)));
+            return ir;
+        };
+        IRData a = burst (100, 1.0f), b = burst (160, -1.0f);
+        auto monoEnergy = [] (const IRData& x, const IRData& y)
+        {
+            double e = 0; const int n = juce::jmin (x.samples.getNumSamples(), y.samples.getNumSamples());
+            for (int i = 0; i < n; ++i) { const double s = x.samples.getSample (0, i) + y.samples.getSample (0, i); e += s * s; }
+            return e;
+        };
+        const double before = monoEnergy (a, b);
+        CabIR::alignPair (a, b);
+        const double after = monoEnergy (a, b);
+        double single = 0; for (int i = 0; i < a.samples.getNumSamples(); ++i) single += (double) a.samples.getSample (0, i) * a.samples.getSample (0, i);
+        check (after > 0.97 * 4.0 * single && after > before * 1.8,
+               "alignment: offset + inverted IRs line up exactly, so they sum to mono at full strength ("
+               + juce::String (100.0 * after / (4.0 * single), 1) + "% of ideal)");
+
+        // Through the cab: both sides answer at the same moment, and differ.
+        CabIR cab; cab.prepare ({ fs, (juce::uint32) block, 2 });
+        cab.load (burst (100, 1.0f), makeFakeIR (fs), false);
+        juce::Thread::sleep (400);
+        bool dual = cab.isDual();
+        juce::AudioBuffer<float> io (2, block);
+        int peakL = -1, peakR = -1; bool differ = false;
+        for (int rep = 0; rep < 40 && (peakL < 0 || peakR < 0); ++rep)
+        {
+            io.clear(); io.setSample (0, 0, 1.0f); io.setSample (1, 0, 1.0f);
+            cab.process (juce::dsp::AudioBlock<float> (io));
+            float mL = 0.05f, mR = 0.05f;
+            for (int i = 0; i < block; ++i)
+            {
+                if (std::abs (io.getSample (0, i)) > mL) { mL = std::abs (io.getSample (0, i)); peakL = i; }
+                if (std::abs (io.getSample (1, i)) > mR) { mR = std::abs (io.getSample (1, i)); peakR = i; }
+                differ = differ || io.getSample (0, i) != io.getSample (1, i);
+            }
+            if (peakL < 0 || peakR < 0) juce::Thread::sleep (20);
+        }
+        check (dual && differ, "unlinked: left and right amps get their own IR");
+        check (peakL >= 0 && peakR >= 0 && std::abs (peakL - peakR) <= 2 && peakL < 24,
+               "unlinked: both sides answer together, no added latency (peaks at " + juce::String (peakL) + " / " + juce::String (peakR) + ")");
+
+        CabIR linked; linked.prepare ({ fs, (juce::uint32) block, 2 });
+        linked.load (burst (100, 1.0f), makeFakeIR (fs), true);
+        check (! linked.isDual(), "linked: one IR on both sides (the right IR is kept but not used)");
+    }
+
+    //==========================================================================
     std::cout << "\nFull engine\n";
     {
         auto guitar = makeGuitar (fs, 6.0, 0.35f);
@@ -262,6 +320,19 @@ int main (int argc, char** argv)
             const double dm = rmsDb (mono.getReadPointer (0), n), ds = rmsDb (rightOnly.getReadPointer (0), n);
             check (lr && std::abs (dm - ds) < 0.5, "guitar on right input only -> centred on both amps, same level ("
                    + juce::String (ds - dm, 2) + " dB)");
+        }
+
+        // Link off with two different IRs: a mono chain comes out in stereo.
+        {
+            Engine e; e.prepare (fs, block);
+            IRData other = makeFakeIR (fs); other.samples.applyGain (-1.0f); other.samples.setSample (0, 40, 0.5f);
+            e.getCab().load (makeFakeIR (fs), other, false);
+            juce::Thread::sleep (400);
+            juce::AudioBuffer<float> io (2, n); io.copyFrom (0, 0, guitar, 0, 0, n); io.clear (1, 0, n);
+            run (e, io, 1);
+            bool differ = false;
+            for (int i = n / 2; i < n && ! differ; ++i) differ = io.getSample (0, i) != io.getSample (1, i);
+            check (differ && allFinite (io), "Link off: one mono guitar, a different cab on each side");
         }
 
         // Mono in -> mono out (Logic's "Mono" format on a mono track)

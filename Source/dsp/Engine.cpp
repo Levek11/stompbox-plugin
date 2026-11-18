@@ -141,7 +141,7 @@ void Engine::process (juce::AudioBuffer<float>& buffer, int numInputChannels, bo
                         pedalOn[(size_t) idx].load (std::memory_order_relaxed), context);
     }
 
-    const bool monoPath = procChannels == 1;
+    bool monoPath = procChannels == 1;
 
     juce::dsp::AudioBlock<float> block (buffer);
     auto active = block.getSubsetChannelBlock (0, (size_t) procChannels);
@@ -154,7 +154,15 @@ void Engine::process (juce::AudioBuffer<float>& buffer, int numInputChannels, bo
     }
     os.processSamplesDown (active);
 
-    // Cab
+    // Cab. Different IRs per side turn even a mono chain into stereo here:
+    // both (identical) amps' output goes to its own IR.
+    if (monoPath && cab.isDual() && buffer.getNumChannels() > 1)
+    {
+        buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
+        procChannels = 2;
+        monoPath = false;
+        active = block.getSubsetChannelBlock (0, 2);
+    }
     cab.process (active);
 
     // Output level

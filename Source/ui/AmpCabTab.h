@@ -46,7 +46,8 @@ private:
 };
 
 //==============================================================================
-/** CAB IR card: name, overview of the IR, Load and Clear. */
+/** CAB IR card. Linked (default): one IR on both amps. Unlinked: a Left and
+    a Right slot, each with its own IR. */
 class CabCard : public juce::Component, private juce::Timer
 {
 public:
@@ -54,17 +55,35 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    int preferredHeight() const;
+    std::function<void()> onHeightChanged;
+
 private:
+    struct LinkSwitch : juce::Button
+    {
+        LinkSwitch() : juce::Button ("Link L/R") { setClickingTogglesState (true); }
+        void paintButton (juce::Graphics&, bool over, bool down) override;
+    };
+
+    struct Slot
+    {
+        juce::TextButton load { "Load IR..." }, clear { "Clear" };
+        juce::String name, detail;
+        std::vector<float> overview;
+        bool valid = false;
+    };
+
     void timerCallback() override;
     void refresh();
-    void chooseFile();
+    void chooseFile (int side);
+    void paintOverview (juce::Graphics&, juce::Rectangle<float>, const std::vector<float>&, const juce::String& emptyText);
 
     StompBoxProcessor& processor;
-    juce::TextButton loadButton { "Load IR..." }, clearButton { "Clear" };
+    LinkSwitch link;
+    std::array<Slot, 2> slots;
     std::unique_ptr<juce::FileChooser> chooser;
-
-    juce::String irName, irDetail, error;
-    std::vector<float> overview;
+    juce::String error;
+    bool linked = true;
     int shownVersion = -1;
 };
 

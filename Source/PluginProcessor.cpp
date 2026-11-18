@@ -42,10 +42,9 @@ void StompBoxProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     engine.prepare (sampleRate, samplesPerBlock);
     setLatencySamples (Engine::latencySamples);   // always 0
 
-    // Re-apply the IR at the new sample rate.
+    // Re-apply the IRs at the new sample rate.
     const juce::ScopedLock sl (irLock);
-    if (currentIR.isValid())
-        engine.getCab().load (currentIR);
+    engine.getCab().load (irs[0], irs[1], cabLinked);
 }
 
 void StompBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -77,7 +76,7 @@ void StompBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 }
 
 //==============================================================================
-juce::Result StompBoxProcessor::loadIRFile (const juce::File& file)
+juce::Result StompBoxProcessor::loadIRFile (const juce::File& file, int side)
 {
     IRData ir;
     auto r = IRData::loadFromFile (file, ir);
@@ -85,32 +84,53 @@ juce::Result StompBoxProcessor::loadIRFile (const juce::File& file)
         return r;
 
     globalSettings().setValue ("lastIRFolder", file.getParentDirectory().getFullPathName());
-    applyIR (std::move (ir));
+    {
+        const juce::ScopedLock sl (irLock);
+        irs[(size_t) juce::jlimit (0, 1, side)] = std::move (ir);
+    }
+    applyIRs();
     return r;
 }
 
-void StompBoxProcessor::clearIR()
-{
-    applyIR ({});
-}
-
-void StompBoxProcessor::applyIR (IRData ir)
+void StompBoxProcessor::clearIR (int side)
 {
     {
         const juce::ScopedLock sl (irLock);
-        currentIR = std::move (ir);
-        if (currentIR.isValid())
-            engine.getCab().load (currentIR);
-        else
-            engine.getCab().clear();
+        irs[(size_t) juce::jlimit (0, 1, side)] = {};
     }
-    ++irVersion;
+    applyIRs();
 }
 
-IRData StompBoxProcessor::getIR() const
+void StompBoxProcessor::setCabLinked (bool linked)
+{
+    {
+        const juce::ScopedLock sl (irLock);
+        cabLinked = linked;
+    }
+    applyIRs();
+}
+
+bool StompBoxProcessor::isCabLinked() const
 {
     const juce::ScopedLock sl (irLock);
-    return currentIR;
+    return cabLinked;
+}
+
+void StompBoxProcessor::applyIRs()
+{
+    {
+        const juce::ScopedLock sl (irLock);
+        engine.getCab().load (irs[0], irs[1], cabLinked);
+    }
+    ++irVersion;
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        updateHostDisplay (juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged (true));
+}
+
+IRData StompBoxProcessor::getIR (int side) const
+{
+    const juce::ScopedLock sl (irLock);
+    return irs[(size_t) juce::jlimit (0, 1, side)];
 }
 
 juce::File StompBoxProcessor::getLastIRFolder() const
@@ -159,11 +179,15 @@ void StompBoxProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.removeChild (state.getChildWithName (IRData::treeType), nullptr);
+    state.removeChild (state.getChildWithName (IRData::rightTreeType), nullptr);
     state.removeChild (state.getChildWithName (board::BoardModel::treeType), nullptr);
     {
         const juce::ScopedLock sl (irLock);
-        if (currentIR.isValid())
-            state.appendChild (currentIR.toValueTree(), nullptr);
+        if (irs[0].isValid())
+            state.appendChild (irs[0].toValueTree (IRData::treeType), nullptr);
+        if (irs[1].isValid())
+            state.appendChild (irs[1].toValueTree (IRData::rightTreeType), nullptr);
+        state.setProperty ("cabLinked", cabLinked, nullptr);
     }
     state.appendChild (getBoard().toValueTree(), nullptr);
     state.setProperty ("stateVersion", 1, nullptr);
@@ -181,11 +205,20 @@ void StompBoxProcessor::setStateInformation (const void* data, int sizeInBytes)
     auto tree = juce::ValueTree::fromXml (*xml);
     auto irTree = tree.getChildWithName (IRData::treeType);
     tree.removeChild (irTree, nullptr);
+    auto irRightTree = tree.getChildWithName (IRData::rightTreeType);
+    tree.removeChild (irRightTree, nullptr);
+    const bool linked = (bool) tree.getProperty ("cabLinked", true);   // older projects: one IR, linked
     auto boardTree = tree.getChildWithName (board::BoardModel::treeType);
     tree.removeChild (boardTree, nullptr);
 
     apvts.replaceState (tree);
-    applyIR (IRData::fromValueTree (irTree));
+    {
+        const juce::ScopedLock sl (irLock);
+        irs[0] = IRData::fromValueTree (irTree, IRData::treeType);
+        irs[1] = IRData::fromValueTree (irRightTree, IRData::rightTreeType);
+        cabLinked = linked;
+    }
+    applyIRs();
     editBoard ([&] (board::BoardModel& b) { b.fromValueTree (boardTree); });
 }
 

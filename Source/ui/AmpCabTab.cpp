@@ -93,13 +93,25 @@ void ChannelSwitch::Segment::paintButton (juce::Graphics& g, bool over, bool)
 //==============================================================================
 CabCard::CabCard (StompBoxProcessor& p) : processor (p)
 {
-    loadButton.onClick = [this] { chooseFile(); };
-    clearButton.onClick = [this] { processor.clearIR(); error.clear(); refresh(); };
-    loadButton.setTooltip ("Load a WAV or AIFF cab impulse response. It's copied into the project, so it travels with it.");
-    addAndMakeVisible (loadButton);
-    addAndMakeVisible (clearButton);
+    for (int side = 0; side < 2; ++side)
+    {
+        auto& sl = slots[(size_t) side];
+        sl.load.onClick = [this, side] { chooseFile (side); };
+        sl.clear.onClick = [this, side] { processor.clearIR (side); error.clear(); refresh(); };
+        sl.load.setTooltip ("Load a WAV or AIFF cab impulse response. It's copied into the project, so it travels with it.");
+        addAndMakeVisible (sl.load);
+        addAndMakeVisible (sl.clear);
+    }
+    link.setTooltip ("Linked: one IR on both amps. Unlinked: a different IR on the left and right amps.");
+    link.onClick = [this] { processor.setCabLinked (link.getToggleState()); refresh(); };
+    addAndMakeVisible (link);
     refresh();
     startTimerHz (5);
+}
+
+int CabCard::preferredHeight() const
+{
+    return linked ? 262 : 336;
 }
 
 void CabCard::timerCallback()
@@ -111,35 +123,55 @@ void CabCard::timerCallback()
 void CabCard::refresh()
 {
     shownVersion = processor.getIRVersion();
-    const auto ir = processor.getIR();
-    if (ir.isValid())
+    const bool wasLinked = linked;
+    linked = processor.isCabLinked();
+    link.setToggleState (linked, juce::dontSendNotification);
+
+    for (int side = 0; side < 2; ++side)
     {
-        irName = ir.name;
-        irDetail = juce::String (ir.samples.getNumSamples() * 1000.0 / ir.sampleRate, 0) + " ms  " + dot + "  "
-                 + juce::String (ir.sampleRate / 1000.0, 1) + " kHz  " + dot + "  applied to L and R";
-        overview = ir.overview (48);
+        auto& sl = slots[(size_t) side];
+        const auto ir = processor.getIR (side);
+        sl.valid = ir.isValid();
+        if (sl.valid)
+        {
+            sl.name = ir.name;
+            sl.detail = juce::String (ir.samples.getNumSamples() * 1000.0 / ir.sampleRate, 0) + " ms  " + dot + "  "
+                      + juce::String (ir.sampleRate / 1000.0, 1) + " kHz"
+                      + (linked ? "  " + dot + "  applied to L and R" : juce::String());
+            sl.overview = ir.overview (48);
+        }
+        else
+        {
+            sl.name = "No IR loaded";
+            sl.detail = side == 0 ? (linked ? "Using a basic speaker filter. Load your York Audio or ToneFactor IR."
+                                            : "Empty: uses the right IR, or a basic speaker filter")
+                                  : "Empty: uses the left IR";
+            sl.overview.clear();
+        }
+        sl.clear.setEnabled (sl.valid);
     }
-    else
-    {
-        irName = "No IR loaded";
-        irDetail = "Using a basic speaker filter. Load your York Audio or ToneFactor IR.";
-        overview.clear();
-    }
-    clearButton.setEnabled (ir.isValid());
+    const bool showRight = ! linked;
+    slots[1].load.setVisible (showRight);
+    slots[1].clear.setVisible (showRight);
+
+    if (wasLinked != linked && onHeightChanged)
+        onHeightChanged();
+    resized();
     repaint();
 }
 
-void CabCard::chooseFile()
+void CabCard::chooseFile (int side)
 {
-    chooser = std::make_unique<juce::FileChooser> ("Load a cab IR", processor.getLastIRFolder(), "*.wav;*.aif;*.aiff");
+    chooser = std::make_unique<juce::FileChooser> (linked ? "Load a cab IR" : (side == 0 ? "Load the left cab IR" : "Load the right cab IR"),
+                                                   processor.getLastIRFolder(), "*.wav;*.aif;*.aiff");
     juce::Component::SafePointer<CabCard> safe (this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                          [safe] (const juce::FileChooser& fc)
+                          [safe, side] (const juce::FileChooser& fc)
     {
         if (safe == nullptr) return;
         const auto file = fc.getResult();
         if (file == juce::File()) return;
-        const auto r = safe->processor.loadIRFile (file);
+        const auto r = safe->processor.loadIRFile (file, side);
         safe->error = r.failed() ? r.getErrorMessage() : juce::String();
         safe->refresh();
     });
@@ -148,11 +180,51 @@ void CabCard::chooseFile()
 void CabCard::resized()
 {
     auto r = getLocalBounds().reduced (18);
-    r.removeFromTop (14 + 12 + 40 + 12 + 44 + 12);
-    auto row = r.removeFromTop (34);
-    loadButton.setBounds (row.removeFromLeft (100));
-    row.removeFromLeft (8);
-    clearButton.setBounds (row.removeFromLeft (70));
+    link.setBounds (r.getRight() - 92, r.getY() - 3, 92, 20);
+
+    if (linked)
+    {
+        r.removeFromTop (14 + 12 + 40 + 12 + 44 + 12);
+        auto row = r.removeFromTop (34);
+        slots[0].load.setBounds (row.removeFromLeft (100));
+        row.removeFromLeft (8);
+        slots[0].clear.setBounds (row.removeFromLeft (70));
+        return;
+    }
+
+    r.removeFromTop (14 + 12);
+    for (int side = 0; side < 2; ++side)
+    {
+        auto slot = r.removeFromTop (104);
+        auto row = slot.removeFromBottom (28);
+        slots[(size_t) side].load.setBounds (row.removeFromLeft (96));
+        row.removeFromLeft (8);
+        slots[(size_t) side].clear.setBounds (row.removeFromLeft (62));
+        r.removeFromTop (12);
+    }
+}
+
+void CabCard::paintOverview (juce::Graphics& g, juce::Rectangle<float> wave, const std::vector<float>& ov, const juce::String& emptyText)
+{
+    g.setColour (juce::Colour (0xff141416));
+    g.fillRoundedRectangle (wave, 6.0f);
+    if (ov.empty())
+    {
+        g.setColour (colours::faint);
+        g.setFont (Fonts::ui (12.0f));
+        g.drawText (emptyText, wave, juce::Justification::centred);
+        return;
+    }
+    auto inner = wave.reduced (10.0f, 6.0f);
+    const float bw = inner.getWidth() / (float) ov.size();
+    for (size_t i = 0; i < ov.size(); ++i)
+    {
+        const float v = juce::jlimit (0.04f, 1.0f, std::sqrt (ov[i]));
+        const float t = (float) i / (float) ov.size();
+        g.setColour (colours::accent.interpolatedWith (juce::Colour (0xff3a2f1d), t));
+        g.fillRoundedRectangle (inner.getX() + (float) i * bw, inner.getCentreY() - v * inner.getHeight() * 0.5f,
+                                juce::jmax (1.5f, bw - 2.0f), v * inner.getHeight(), 1.0f);
+    }
 }
 
 void CabCard::paint (juce::Graphics& g)
@@ -168,39 +240,40 @@ void CabCard::paint (juce::Graphics& g)
     drawTracked (g, "CAB IR", Fonts::label (11.0f), 0.12f, r.removeFromTop (14.0f), juce::Justification::left);
     r.removeFromTop (12.0f);
 
-    auto nameArea = r.removeFromTop (40.0f);
-    g.setColour (colours::text);
-    g.setFont (Fonts::ui (15.0f, true));
-    g.drawText (irName, nameArea.removeFromTop (20.0f), juce::Justification::left, true);
-    g.setColour (colours::muted);
-    g.setFont (Fonts::ui (12.0f));
-    g.drawFittedText (irDetail, nameArea.toNearestInt(), juce::Justification::topLeft, 2);
-    r.removeFromTop (12.0f);
-
-    // IR overview
-    auto wave = r.removeFromTop (44.0f);
-    g.setColour (juce::Colour (0xff141416));
-    g.fillRoundedRectangle (wave, 6.0f);
-    if (! overview.empty())
+    if (linked)
     {
-        auto inner = wave.reduced (10.0f, 7.0f);
-        const float bw = inner.getWidth() / (float) overview.size();
-        for (size_t i = 0; i < overview.size(); ++i)
-        {
-            const float v = juce::jlimit (0.04f, 1.0f, std::sqrt (overview[i]));
-            const float t = (float) i / (float) overview.size();
-            g.setColour (colours::accent.interpolatedWith (juce::Colour (0xff3a2f1d), t));
-            g.fillRoundedRectangle (inner.getX() + i * bw, inner.getCentreY() - v * inner.getHeight() * 0.5f,
-                                    juce::jmax (1.5f, bw - 2.0f), v * inner.getHeight(), 1.0f);
-        }
+        const auto& sl = slots[0];
+        auto nameArea = r.removeFromTop (40.0f);
+        g.setColour (colours::text);
+        g.setFont (Fonts::ui (15.0f, true));
+        g.drawText (sl.name, nameArea.removeFromTop (20.0f), juce::Justification::left, true);
+        g.setColour (colours::muted);
+        g.setFont (Fonts::ui (12.0f));
+        g.drawFittedText (sl.detail, nameArea.toNearestInt(), juce::Justification::topLeft, 2);
+        r.removeFromTop (12.0f);
+        paintOverview (g, r.removeFromTop (44.0f), sl.overview, "Empty");
+        r.removeFromTop (12.0f + 34.0f + 12.0f);
     }
     else
     {
-        g.setColour (colours::faint);
-        g.setFont (Fonts::ui (12.0f));
-        g.drawText ("Empty", wave, juce::Justification::centred);
+        for (int side = 0; side < 2; ++side)
+        {
+            const auto& sl = slots[(size_t) side];
+            auto slot = r.removeFromTop (104.0f);
+            auto head = slot.removeFromTop (18.0f);
+            g.setColour (colours::accent);
+            drawTracked (g, side == 0 ? "LEFT" : "RIGHT", Fonts::label (10.0f), 0.12f, head.removeFromLeft (44.0f), juce::Justification::left);
+            g.setColour (sl.valid ? colours::text : colours::muted);
+            g.setFont (Fonts::ui (13.0f, true));
+            g.drawText (sl.name, head, juce::Justification::left, true);
+            g.setColour (colours::muted);
+            g.setFont (Fonts::ui (11.5f));
+            g.drawText (sl.detail, slot.removeFromTop (16.0f), juce::Justification::left, true);
+            slot.removeFromTop (4.0f);
+            paintOverview (g, slot.removeFromTop (28.0f), sl.overview, side == 0 ? "Empty" : "Empty: same as left");
+            r.removeFromTop (12.0f);
+        }
     }
-    r.removeFromTop (12.0f + 34.0f + 12.0f);
 
     g.setFont (Fonts::ui (12.0f));
     if (error.isNotEmpty())
@@ -211,8 +284,24 @@ void CabCard::paint (juce::Graphics& g)
     else
     {
         g.setColour (colours::faint);
-        g.drawFittedText ("Saved inside the project, so it travels with it.", r.toNearestInt(), juce::Justification::topLeft, 2);
+        g.drawFittedText (linked ? juce::String ("Saved inside the project, so it travels with it.")
+                                 : juce::String ("Two different IRs are lined up automatically, so the guitar stays full in mono. Saved in the project."),
+                          r.toNearestInt(), juce::Justification::topLeft, 2);
     }
+}
+
+void CabCard::LinkSwitch::paintButton (juce::Graphics& g, bool over, bool)
+{
+    auto r = getLocalBounds().toFloat();
+    const bool on = getToggleState();
+    auto pill = r.removeFromRight (30.0f).withSizeKeepingCentre (30.0f, 16.0f);
+    g.setColour (on ? colours::accent : colours::segmentOn);
+    g.fillRoundedRectangle (pill, 8.0f);
+    g.setColour (juce::Colours::white);
+    g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ on ? pill.getRight() - 8.0f : pill.getX() + 8.0f, pill.getCentreY() }));
+    g.setColour (over ? colours::text : colours::muted);
+    g.setFont (Fonts::ui (11.5f));
+    g.drawText ("Link L/R", r.withTrimmedRight (6.0f), juce::Justification::centredRight);
 }
 
 //==============================================================================
@@ -221,7 +310,7 @@ OutputCard::OutputCard (juce::AudioProcessorValueTreeState& state)
 {
     slider.setSliderStyle (juce::Slider::LinearHorizontal);
     slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    slider.setDoubleClickReturnValue (true, 0.0);
+    slider.setDoubleClickReturnValue (true, -4.0);
     slider.setTitle ("Output level");
     slider.onValueChange = [this] { repaint(); };
     addAndMakeVisible (slider);
@@ -265,6 +354,7 @@ AmpCabTab::AmpCabTab (StompBoxProcessor& p)
 {
     for (auto* c : std::initializer_list<juce::Component*> { &channel, &volume, &treble, &bass, &cut, &master, &cabCard, &outputCard })
         addAndMakeVisible (c);
+    cabCard.onHeightChanged = [this] { resized(); };
 }
 
 juce::Rectangle<float> AmpCabTab::ampBounds() const
@@ -296,7 +386,7 @@ void AmpCabTab::resized()
     }
 
     auto aside = getLocalBounds().removeFromRight (asideWidth).reduced (22, 24);
-    cabCard.setBounds (aside.removeFromTop (262));
+    cabCard.setBounds (aside.removeFromTop (cabCard.preferredHeight()));
     aside.removeFromTop (16);
     outputCard.setBounds (aside.removeFromTop (102));
 }
