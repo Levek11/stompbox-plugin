@@ -9,8 +9,8 @@ cab IR. Built for worship guitar, built in the cloud.
 | Step | What | Status |
 |---|---|---|
 | 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | Done |
-| 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | **In this build** |
-| 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | Next |
+| 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | Done |
+| 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | **In this build** |
 | 3 | Overdrives: Blue Highway, Scotland, Nutrient | |
 | 4 | Compressors: Pacific 76, Silver 76, Fresh Squeeze | |
 | 5 | Time Machine, Open Sky | |
@@ -26,6 +26,19 @@ cab IR. Built for worship guitar, built in the cloud.
 - Click a pedal for its close-up; the footswitch toggles it on the board.
 - Everything is saved with the Logic project. Pedals pass audio through
   unchanged until their sound arrives (step noted in each close-up).
+
+## The first pedals (2b)
+
+- **Hot Rod** (SD-1): op-amp gain stage focused above ~720 Hz, three silicon
+  diodes clipping asymmetrically, active Tone, Level. Oversampled.
+- **Golden Hour** (Morning Glory V4): Bluesbreaker-family gain stage into
+  soft symmetrical diode clipping; Gain switch (up = more gain and low end),
+  Hi-Cut switch, high-headroom Volume. Oversampled.
+- **Afterglow** (HALO): stereo modulated dual echo with tape-like repeats
+  (darker, saturating), RHYTHM 1/4, dotted 1/8 or HALO (both at once), SYNC to
+  Logic's tempo (incl. tempo changes) or FREE in ms, trails when switched off.
+- The chain is mono until a stereo pedal; after it, mono pedals run as dual
+  mono and each side feeds its own Royal 30.
 
 ## What's in step 1
 

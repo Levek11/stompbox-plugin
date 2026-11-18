@@ -35,8 +35,9 @@ struct PedalPainter
     /** Hit test in design space: control index under a point, or -1. */
     static int controlAt (const board::PedalDef&, juce::Point<float> designPoint);
 
-    /** Value shown for a control: 0-10 for knobs and sliders, position name for toggles. */
-    static juce::String valueText (const board::ControlDef&, float value);
+    /** Value shown for a control: 0-10 for knobs and sliders, position name for
+        toggles, milliseconds for time knobs ("SYNC" while synced to Logic). */
+    static juce::String valueText (const board::PedalDef&, const board::BoardModel::PedalState&, int control);
 };
 
 /** "BLUE\nHIGHWAY" -> "Blue Highway". */

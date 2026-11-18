@@ -36,11 +36,12 @@ static std::vector<PedalDef> build()
 
     // --- Row 1 of the shelf: overdrives ---------------------------------------
     v.push_back ({ "goldenHour", "GOLDEN HOUR", "OVERDRIVE", "JHS Morning Glory V4",
-                   0xffb69754, 0xff1e1e1e, 1, false, 1, 84.0f, 11.0f, D::none, "", 0, 2,
+                   0xffb69754, 0xff1e1e1e, 1, false, 1, 84.0f, 11.0f, D::none, "", 0, 0,
                    { { "volume", "VOLUME", K::knob, 24.0f, 22.0f, 24.0f, 0.5f },
                      { "drive",  "DRIVE",  K::knob, 88.0f, 22.0f, 24.0f, 0.4f },
-                     { "gain",   "GAIN",   K::toggle, 24.0f, 55.0f, 14.0f, 0.0f, 2, dark, light, "HI|LO" },
-                     { "tone",   "TONE",   K::knob, 88.0f, 58.0f, 24.0f, 0.5f } } });
+                     { "gain",   "GAIN",   K::toggle, 24.0f, 55.0f, 14.0f, 1.0f, 2, dark, light, "HI|LO" },
+                     { "tone",   "TONE",   K::knob, 88.0f, 58.0f, 24.0f, 0.5f },
+                     { "hicut",  "HI-CUT", K::toggle, 56.0f, 58.0f, 11.0f, 1.0f, 2, dark, light, "ON|OFF" } } });
 
     v.push_back ({ "scotland", "SCOTLAND", "OVERDRIVE", "JHS Kilt",
                    0xffbfc1c3, 0xff1e1e1e, 1, false, 1, 90.0f, 12.0f, D::none, "", 0, 3,
@@ -56,7 +57,7 @@ static std::vector<PedalDef> build()
                    threeKnobBoss ("LEVEL", "GAIN", "TONE") });
 
     v.push_back ({ "hotRod", "HOT\nROD", "OVERDRIVE", "Boss SD-1 Super OverDrive",
-                   0xffebc45b, 0xff1e1e1e, 1, false, 1, 82.0f, 12.0f, D::none, "", 0, 2,
+                   0xffebc45b, 0xff1e1e1e, 1, false, 1, 82.0f, 12.0f, D::none, "", 0, 0,
                    threeKnobBoss ("LEVEL", "DRIVE", "TONE") });
 
     // --- Row 2: compressors and the dual overdrive ------------------------------
@@ -108,14 +109,14 @@ static std::vector<PedalDef> build()
 
     // --- Row 4: delay, utilities, 1176 -------------------------------------------
     v.push_back ({ "afterglow", "AFTERGLOW", "DELAY", "Keeley HALO Dual Echo",
-                   0xff292a2c, light, 1, true, 1, 83.0f, 12.0f, D::none, "", 0, 2,
-                   { { "time",    "TIME",    K::knob, 23.0f, 20.0f, 24.0f, 0.5f, 1, cream, dark },
-                     { "repeats", "REPEATS", K::knob, 89.0f, 20.0f, 24.0f, 0.35f, 1, cream, dark },
-                     { "mix",     "MIX",     K::knob, 56.0f, 32.0f, 24.0f, 0.35f, 1, cream, dark },
+                   0xff292a2c, light, 1, true, 1, 83.0f, 12.0f, D::none, "", 0, 0,
+                   { { "time",    "TIME",    K::knob, 23.0f, 20.0f, 24.0f, 0.5f, 1, cream, dark, "", "sync", 60.0f, 1500.0f },
+                     { "repeats", "FDBK",    K::knob, 89.0f, 20.0f, 24.0f, 0.35f, 1, cream, dark },
+                     { "mix",     "LEVEL",   K::knob, 56.0f, 32.0f, 24.0f, 0.35f, 1, cream, dark },
                      { "rate",    "RATE",    K::knob, 23.0f, 56.0f, 24.0f, 0.3f, 1, cream, dark },
                      { "depth",   "DEPTH",   K::knob, 89.0f, 56.0f, 24.0f, 0.2f, 1, cream, dark },
-                     { "division", "DIVISION", K::toggle, 56.0f, 59.0f, 14.0f, 0.5f, 3, dark, light,
-                       "1/4|D.1/8|1/8" } } });
+                     { "rhythm",  "RHYTHM",  K::toggle, 45.0f, 59.0f, 14.0f, 0.5f, 3, dark, light, "1/4|D.1/8|HALO" },
+                     { "sync",    "SYNC",    K::toggle, 67.0f, 59.0f, 14.0f, 0.0f, 2, dark, light, "SYNC|FREE" } } });
 
     v.push_back ({ "trueTone", "TRUE\nTONE", "TUNER", "Boss TU-3",
                    0xfff0f0e9, 0xff1e1e1e, 1, false, 1, 76.0f, 12.0f, D::tuner, "E", 0xff7dff8a, 6, {} });

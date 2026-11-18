@@ -39,8 +39,17 @@ int PedalPainter::controlAt (const PedalDef& def, juce::Point<float> p)
     return -1;
 }
 
-juce::String PedalPainter::valueText (const ControlDef& c, float v)
+juce::String PedalPainter::valueText (const PedalDef& def, const BoardModel::PedalState& st, int index)
 {
+    const auto& c = def.controls[(size_t) index];
+    const float v = st.values[(size_t) index];
+    if (c.msMax > 0.0f)
+    {
+        for (size_t k = 0; k < def.controls.size(); ++k)
+            if (std::strcmp (def.controls[k].id, c.lockedBy) == 0 && st.values[k] < 0.5f)
+                return "SYNC";
+        return juce::String (juce::roundToInt (c.msMin * std::pow (c.msMax / c.msMin, v))) + " ms";
+    }
     if (c.kind == ControlDef::Kind::toggle)
     {
         const auto names = juce::StringArray::fromTokens (c.positionNames, "|", "");
@@ -264,7 +273,7 @@ void PedalPainter::draw (juce::Graphics& g, const PedalDef& def, const BoardMode
                 g.fillRoundedRectangle (area.expanded (1.5f, 0.6f), 1.5f);
             }
             g.setColour (active ? juce::Colours::white : text.withAlpha (0.9f));
-            drawTracked (g, active ? PedalPainter::valueText (c, v) : juce::String (c.label),
+            drawTracked (g, active ? PedalPainter::valueText (def, st, (int) i) : juce::String (c.label),
                          Fonts::label (fontH), 0.08f, area, juce::Justification::centred);
         }
     }

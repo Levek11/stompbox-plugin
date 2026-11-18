@@ -17,6 +17,8 @@ StompBoxProcessor::StompBoxProcessor()
     pMaster  = apvts.getRawParameterValue (params::master);
     pOutput  = apvts.getRawParameterValue (params::output);
 
+    engine.setBoard (board);
+
     const int q = globalSettings().getIntValue ("quality", (int) Quality::studio);
     engine.setQuality (q == (int) Quality::live ? Quality::live : Quality::studio);
 }
@@ -63,6 +65,13 @@ void StompBoxProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     s.master = pMaster->load();
     engine.setAmpSettings (s);
     engine.setOutputDb (pOutput->load());
+
+    double bpm = 120.0;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            if (auto b = pos->getBpm())
+                bpm = *b;
+    engine.setTempo (bpm);
 
     engine.process (buffer, numIn, isNonRealtime());
 }

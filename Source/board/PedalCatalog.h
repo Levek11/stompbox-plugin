@@ -29,6 +29,8 @@ struct ControlDef
     std::uint32_t cap = 0xff161618;      // knob cap colour (ARGB)
     std::uint32_t pointer = 0xfff4f1ea;  // knob pointer colour
     const char* positionNames = "";      // toggles: "A|B|C", top to bottom
+    const char* lockedBy = "";           // id of a toggle: while it's in its first position, this control is inactive
+    float msMin = 0.0f, msMax = 0.0f;    // time knobs: shown in milliseconds (exponential sweep)
 };
 
 struct PedalDef

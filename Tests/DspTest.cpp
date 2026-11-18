@@ -9,6 +9,7 @@
 #include "dsp/Engine.h"
 #include "dsp/ToneStack.h"
 #include "BoardTests.h"
+#include "PedalTests.h"
 
 using namespace stompbox;
 
@@ -285,6 +286,7 @@ int main (int argc, char** argv)
 
     //==========================================================================
     boardtests::run ([] (bool ok, const juce::String& what) { check (ok, what); });
+    pedaltests::run ([] (bool ok, const juce::String& what) { check (ok, what); });
 
     //==========================================================================
     if (argc > 1)

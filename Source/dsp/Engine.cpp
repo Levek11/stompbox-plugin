@@ -1,4 +1,6 @@
 #include "Engine.h"
+#include "pedals/DrivePedals.h"
+#include "pedals/Afterglow.h"
 
 namespace stompbox
 {
@@ -11,6 +13,39 @@ Engine::Engine()
     : osLive   (2, 1, OS::filterHalfBandPolyphaseIIR, true, false),
       osStudio (2, 2, OS::filterHalfBandPolyphaseIIR, true, false)
 {
+    // One processor per modeled pedal. Pedals without a sound yet are null and
+    // pass the signal through untouched.
+    pedals[(size_t) board::indexOf ("hotRod")]     = std::make_unique<dsp::HotRod>();
+    pedals[(size_t) board::indexOf ("goldenHour")] = std::make_unique<dsp::GoldenHour>();
+    pedals[(size_t) board::indexOf ("afterglow")]  = std::make_unique<dsp::Afterglow>();
+
+    const auto& cat = board::catalog();
+    for (size_t i = 0; i < cat.size(); ++i)
+    {
+        pedalOn[i].store (true);
+        for (size_t k = 0; k < cat[i].controls.size() && k < 16; ++k)
+            pedalValues[i][k].store (cat[i].controls[k].defaultValue);
+    }
+}
+
+void Engine::setBoard (const board::BoardModel& b)
+{
+    const auto& cat = board::catalog();
+    for (int i = 0; i < board::numPedals; ++i)
+    {
+        const auto& st = b.pedal (i);
+        pedalOn[(size_t) i].store (st.on);
+        for (size_t k = 0; k < cat[(size_t) i].controls.size() && k < 16; ++k)
+            pedalValues[(size_t) i][k].store (st.values[k]);
+    }
+
+    Chain c;
+    for (int index : b.signalOrder())
+        c.order[(size_t) c.count++] = index;
+
+    const juce::SpinLock::ScopedLockType sl (chainLock);
+    pendingChain = c;
+    ++pendingVersion;
 }
 
 void Engine::prepare (double sampleRate, int maximumBlockSize)
@@ -22,6 +57,8 @@ void Engine::prepare (double sampleRate, int maximumBlockSize)
     osStudio.initProcessing ((size_t) maximumBlockSize);
 
     cab.prepare ({ sampleRate, (juce::uint32) maximumBlockSize, 2 });
+    for (auto& p : pedals)
+        if (p != nullptr) p->prepare (sampleRate, maximumBlockSize);
 
     outputGain.reset (sampleRate, 0.05);
     outputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (outputDb.load()));
@@ -35,6 +72,8 @@ void Engine::reset()
     osStudio.reset();
     amp.reset();
     cab.reset();
+    for (auto& p : pedals)
+        if (p != nullptr) p->reset();
     inputEnv[0] = inputEnv[1] = 0.0f;
     foldWeight[0] = foldWeight[1] = 0.5f;
 }
@@ -58,13 +97,51 @@ void Engine::process (juce::AudioBuffer<float>& buffer, int numInputChannels, bo
 
     // The input jack is mono, like a real guitar cable. A stereo track whose
     // guitar sits on one side (e.g. Input 1-2 with the guitar in input 2) is
-    // folded to that side; a true dual-mono input is averaged. Both amps then
-    // get the same signal. (Stereo will start at the stereo pedals, step 2.)
+    // folded to that side; a true dual-mono input is averaged.
     if (numInputChannels >= 2 && buffer.getNumChannels() >= 2)
         foldInputToMono (buffer);
 
-    const bool monoPath = true;   // no stereo source before the amps yet
-    const int procChannels = 1;
+    // --- Pedals --------------------------------------------------------------
+    // Pick up board changes without ever blocking the audio thread.
+    if (chainLock.tryEnter())
+    {
+        if (pendingVersion != activeVersion)
+        {
+            // Pedals that just arrived on the board start from silence.
+            for (int k = 0; k < pendingChain.count; ++k)
+            {
+                const int idx = pendingChain.order[(size_t) k];
+                bool wasThere = false;
+                for (int j = 0; j < activeChain.count; ++j) wasThere = wasThere || activeChain.order[(size_t) j] == idx;
+                if (! wasThere && pedals[(size_t) idx] != nullptr) pedals[(size_t) idx]->reset();
+            }
+            activeChain = pendingChain;
+            activeVersion = pendingVersion;
+        }
+        chainLock.exit();
+    }
+
+    context.studio = q == (int) Quality::studio;
+    const bool canStereo = buffer.getNumChannels() >= 2;
+    int procChannels = 1;
+    float values[16];
+    for (int k = 0; k < activeChain.count; ++k)
+    {
+        const int idx = activeChain.order[(size_t) k];
+        auto* pedal = pedals[(size_t) idx].get();
+        if (pedal == nullptr) continue;
+
+        if (pedal->isStereo() && canStereo && procChannels == 1)
+        {
+            buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);   // the chain turns stereo here
+            procChannels = 2;
+        }
+        for (int v = 0; v < 16; ++v) values[v] = pedalValues[(size_t) idx][(size_t) v].load (std::memory_order_relaxed);
+        pedal->process (buffer.getArrayOfWritePointers(), procChannels, numSamples, values,
+                        pedalOn[(size_t) idx].load (std::memory_order_relaxed), context);
+    }
+
+    const bool monoPath = procChannels == 1;
 
     juce::dsp::AudioBlock<float> block (buffer);
     auto active = block.getSubsetChannelBlock (0, (size_t) procChannels);

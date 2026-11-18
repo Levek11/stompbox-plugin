@@ -27,7 +27,7 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return stompbox::IRData::maxSeconds; }
+    double getTailLengthSeconds() const override { return 8.0; }   // delay trails + cab IR
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -72,6 +72,7 @@ public:
             ~Bump()
             {
                 ++p.boardVersion;
+                p.engine.setBoard (p.getBoard());
                 if (juce::MessageManager::existsAndIsCurrentThread())
                     p.updateHostDisplay (juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged (true));
             }
