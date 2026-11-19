@@ -63,7 +63,7 @@ static std::vector<PedalDef> build()
 
     // --- Row 2: compressors and the dual overdrive ------------------------------
     v.push_back ({ "freshSqueeze", "FRESH\nSQUEEZE", "COMPRESSOR", "JHS Pulp 'N' Peel V4",
-                   0xffef7822, 0xff1e1e1e, 1, false, 1, 88.0f, 12.0f, D::none, "", 0, 4,
+                   0xffef7822, 0xff1e1e1e, 1, false, 1, 88.0f, 12.0f, D::none, "", 0, 0,
                    { { "volume", "VOLUME", K::knob, 26.0f, 26.0f, 20.0f, 0.5f, 1, cream, dark },
                      { "comp",   "COMP",   K::knob, 86.0f, 26.0f, 20.0f, 0.5f, 1, cream, dark },
                      { "eq",     "EQ",     K::knob, 26.0f, 62.0f, 20.0f, 0.5f, 1, cream, dark },
@@ -71,7 +71,7 @@ static std::vector<PedalDef> build()
                      { "dirt",   "DIRT",   K::toggle, 56.0f, 29.0f, 12.0f, 0.0f, 2, dark, light, "OFF|ON" } } });
 
     v.push_back ({ "pacific76", "PACIFIC 76", "COMPRESSOR", "Origin Effects Cali76",
-                   0xffb8b7b0, 0xff1e1e1e, 1, false, 1, 84.0f, 11.0f, D::meter, "", 0xff8a7a4a, 4,
+                   0xffb8b7b0, 0xff1e1e1e, 1, false, 1, 84.0f, 11.0f, D::meter, "", 0xff8a7a4a, 0,
                    { { "in",      "IN",      K::knob, 30.0f, 20.0f, 20.0f, 0.5f },
                      { "out",     "OUT",     K::knob, 56.0f, 20.0f, 20.0f, 0.5f },
                      { "dry",     "DRY",     K::knob, 82.0f, 20.0f, 20.0f, 0.0f },
@@ -120,11 +120,11 @@ static std::vector<PedalDef> build()
                      { "depth",   "DEPTH",   K::knob, 89.0f, 56.0f, 24.0f, 0.70f, 1, cream, dark } } });
 
     v.push_back ({ "trueTone", "TRUE\nTONE", "TUNER", "Boss TU-3",
-                   0xfff0f0e9, 0xff1e1e1e, 1, false, 1, 76.0f, 12.0f, D::tuner, "E", 0xff7dff8a, 6, {} });
+                   0xfff0f0e9, 0xff1e1e1e, 1, false, 1, 76.0f, 12.0f, D::tuner, "E", 0xff7dff8a, 0, {} });
 
     {
         PedalDef p { "sculptor", "SCULPTOR", "EQUALIZER", "Boss GE-7 Equalizer",
-                     0xffe5d5b8, 0xff1e1e1e, 1, false, 1, 65.0f, 12.0f, D::none, "", 0, 6, {} };
+                     0xffe5d5b8, 0xff1e1e1e, 1, false, 1, 65.0f, 12.0f, D::none, "", 0, 0, {} };
         static const char* const bands[8] = { "100", "200", "400", "800", "1.6K", "3.2K", "6.4K", "LEVEL" };
         static const char* const ids[8] = { "b100", "b200", "b400", "b800", "b1k6", "b3k2", "b6k4", "level" };
         const float xs[8] = { 12.0f, 24.0f, 36.0f, 48.0f, 60.0f, 72.0f, 84.0f, 100.0f };
@@ -134,13 +134,14 @@ static std::vector<PedalDef> build()
     }
 
     v.push_back ({ "silver76", "SILVER 76", "COMPRESSOR", "Universal Audio UAFX 1176 Studio Compressor",
-                   0xffb5bac0, 0xff1e1e1e, 1, false, 1, 91.0f, 11.0f, D::none, "", 0, 4,
+                   0xffb5bac0, 0xff1e1e1e, 1, false, 1, 91.0f, 11.0f, D::none, "", 0, 0,
                    { { "input",   "INPUT",   K::knob, 21.0f, 28.0f, 22.0f, 0.4f },
                      { "output",  "OUTPUT",  K::knob, 91.0f, 28.0f, 22.0f, 0.5f },
                      { "mode",    "MODE",    K::toggle, 56.0f, 30.0f, 12.0f, 0.0f, 3, dark, light, "SINGLE|DUAL|SUSTAIN" },
-                     { "attack",  "ATTACK",  K::knob, 21.0f, 66.0f, 16.0f, 0.5f },
-                     { "release", "RELEASE", K::knob, 56.0f, 66.0f, 16.0f, 0.5f },
-                     { "mix",     "MIX",     K::knob, 91.0f, 66.0f, 16.0f, 1.0f } } });
+                     { "attack",  "ATTACK",  K::knob, 15.0f, 66.0f, 14.0f, 0.5f },
+                     { "release", "RELEASE", K::knob, 41.0f, 66.0f, 14.0f, 0.5f },
+                     { "ratio",   "RATIO",   K::knob, 70.0f, 66.0f, 14.0f, 0.0f, 5, 0xff161618, 0xfff4f1ea, "4:1|8:1|12:1|20:1|ALL" },
+                     { "mix",     "MIX",     K::knob, 97.0f, 66.0f, 14.0f, 1.0f } } });
 
     return v;
 }

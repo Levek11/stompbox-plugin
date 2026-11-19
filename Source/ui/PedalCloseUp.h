@@ -15,6 +15,7 @@ namespace stompbox::ui
 class PedalCloseUp : public juce::Component
 {
 public:
+    int getPedalIndex() const noexcept { return index; }
     PedalCloseUp (StompBoxProcessor&, int pedalIndex, std::function<void()> onClose);
 
     void paint (juce::Graphics&) override;

@@ -57,7 +57,7 @@ float PedalCloseUp::valueOf (int control) const
 void PedalCloseUp::setValue (int control, float v)
 {
     const auto& c = catalog()[(size_t) index].controls[(size_t) control];
-    if (c.kind == ControlDef::Kind::toggle)
+    if (c.positions > 1)   // toggles and stepped knobs snap
     {
         const float steps = (float) (c.positions - 1);
         v = std::round (v * steps) / steps;
@@ -104,6 +104,7 @@ void PedalCloseUp::paint (juce::Graphics& g)
         look.showLabels = true;
         look.activeControl = activeControl >= 0 ? activeControl : hoverControl;
         look.footswitchHover = hoverFootswitch;
+        look.liveCount = processor.pedalTelemetry (index, look.live.data());
         PedalPainter::draw (g, def, board.pedal (index), pedal, look);
     }
 

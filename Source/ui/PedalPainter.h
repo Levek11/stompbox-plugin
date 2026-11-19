@@ -19,6 +19,8 @@ struct PedalPainter
         bool showLabels = false;       // control labels (close-up)
         int activeControl = -1;        // close-up: control being adjusted (its label shows the value)
         float alpha = 1.0f;
+        std::array<float, 4> live {};  // live readings from the engine (tuner, meter)
+        int liveCount = 0;             // 0 = none (shelf, drag): draw the static look
     };
 
     static void draw (juce::Graphics&, const board::PedalDef&, const board::BoardModel::PedalState&,

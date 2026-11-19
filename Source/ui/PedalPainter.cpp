@@ -50,15 +50,15 @@ juce::String PedalPainter::valueText (const PedalDef& def, const BoardModel::Ped
                 return "SYNC";
         return juce::String (juce::roundToInt (c.msMin * std::pow (c.msMax / c.msMin, v))) + " ms";
     }
-    if (c.kind == ControlDef::Kind::toggle)
+    if (c.kind == ControlDef::Kind::toggle || c.positions > 1)
     {
         const auto names = juce::StringArray::fromTokens (c.positionNames, "|", "");
         const int pos = juce::roundToInt (v * (float) (c.positions - 1));
         return juce::isPositiveAndBelow (pos, names.size()) ? names[pos] : juce::String (pos + 1);
     }
-    if (c.kind == ControlDef::Kind::slider && std::strcmp (c.id, "level") != 0)
+    if (c.kind == ControlDef::Kind::slider)
     {
-        const float db = (v - 0.5f) * 30.0f;   // GE-7 style +-15 dB bands
+        const float db = (v - 0.5f) * 30.0f;   // GE-7 style +-15 dB bands and level
         return (db > 0.05f ? "+" : "") + juce::String (db, 1) + " dB";
     }
     return juce::String (v * 10.0f, 1);
@@ -166,7 +166,7 @@ static void drawLettering (juce::Graphics& g, const juce::String& text, juce::Fo
     }
 }
 
-static void drawDecor (juce::Graphics& g, const PedalDef& def)
+static void drawDecor (juce::Graphics& g, const PedalDef& def, const PedalPainter::Look& look)
 {
     switch (def.decor)
     {
@@ -196,23 +196,58 @@ static void drawDecor (juce::Graphics& g, const PedalDef& def)
             const auto screen = juce::Rectangle<float> (14.0f, 10.0f, 84.0f, 40.0f);
             g.setColour (juce::Colour (0xff0d0f0e));
             g.fillRoundedRectangle (screen, 4.0f);
-            g.setColour (col (def.displayColour));
-            g.setFont (Fonts::ui (15.0f, true));
-            g.drawText (def.displayText, screen.withHeight (26.0f).translated (0.0f, 3.0f), juce::Justification::centred);
-            for (int i = 0; i < 7; ++i)
+
+            // Static look on the shelf; live on the board (dark while bypassed).
+            juce::String name = def.displayText;
+            int lit = 3;              // centre LED
+            bool show = true;
+            if (look.liveCount >= 2)
             {
-                g.setColour (i == 3 ? col (def.displayColour) : juce::Colour (0xff3a3a3a));
-                g.fillRect (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ 38.0f + 6.0f * (float) i, 39.0f }));
+                show = look.live[1] > 0.5f;
+                if (look.live[0] < 0.0f)
+                {
+                    name = "-";
+                    lit = -1;
+                }
+                else
+                {
+                    static const char* const names[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+                    const int n = juce::roundToInt (look.live[0]);
+                    const float cents = (look.live[0] - (float) n) * 100.0f;
+                    name = names[((n % 12) + 12) % 12];
+                    // In tune (within 3 cents): the centre LED; else 1-3 LEDs out by 1/3/~17+ cents steps.
+                    if (std::abs (cents) <= 3.0f) lit = 3;
+                    else lit = 3 + (cents > 0.0f ? 1 : -1) * juce::jlimit (1, 3, 1 + (int) (std::abs (cents) / 17.0f));
+                }
+            }
+            if (show)
+            {
+                const auto on = col (def.displayColour), sharpFlat = juce::Colour (0xffff5a4a);
+                g.setColour (lit == 3 ? on : sharpFlat);
+                g.setFont (Fonts::ui (15.0f, true));
+                g.drawText (name, screen.withHeight (26.0f).translated (0.0f, 3.0f), juce::Justification::centred);
+                for (int i = 0; i < 7; ++i)
+                {
+                    g.setColour (i == lit ? (i == 3 ? on : sharpFlat) : juce::Colour (0xff3a3a3a));
+                    g.fillRect (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ 38.0f + 6.0f * (float) i, 39.0f }));
+                }
             }
             break;
         }
         case PedalDef::Decor::meter:
+        {
+            // Gain-reduction meter: 2 dB a dot, green / amber / red.
+            const int litDots = look.liveCount >= 1 ? juce::jlimit (0, 10, juce::roundToInt (look.live[0] / 2.0f)) : -1;
             for (int i = 0; i < 10; ++i)
             {
-                g.setColour (col (def.displayColour));
+                auto c = col (def.displayColour);
+                if (i < litDots)
+                    c = i < 5 ? juce::Colour (0xff6dff6a) : i < 8 ? juce::Colour (0xffffc23a) : juce::Colour (0xffff4a3a);
+                g.setColour (c);
                 g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ 24.5f + 7.0f * (float) i, 64.0f }));
             }
             break;
+        }
         case PedalDef::Decor::none:
             break;
     }
@@ -244,7 +279,7 @@ void PedalPainter::draw (juce::Graphics& g, const PedalDef& def, const BoardMode
     g.setColour (juce::Colours::black.withAlpha (0.2f));
     g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, h - 3.0f, w - 8.0f, 3.0f), 1.5f);
 
-    drawDecor (g, def);
+    drawDecor (g, def, look);
 
     // Controls
     for (size_t i = 0; i < def.controls.size(); ++i)

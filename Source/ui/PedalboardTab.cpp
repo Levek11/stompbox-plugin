@@ -13,7 +13,7 @@ static const juce::String dot = juce::String::charToString ((juce::juce_wchar) 0
 PedalboardTab::PedalboardTab (StompBoxProcessor& p) : processor (p)
 {
     refreshModel();
-    startTimerHz (15);
+    startTimerHz (30);
 }
 
 PedalboardTab::~PedalboardTab() = default;
@@ -22,6 +22,17 @@ void PedalboardTab::timerCallback()
 {
     if (processor.getBoardVersion() != shownVersion)
         refreshModel();
+
+    // Live displays (tuner, gain-reduction meter): repaint only what changed.
+    for (int i = 0; i < numPedals; ++i)
+    {
+        std::array<float, 4> v {};
+        const int n = model.isOnBoard (i) ? processor.pedalTelemetry (i, v.data()) : 0;
+        if (n == 0 || v == shownLive[(size_t) i]) continue;
+        shownLive[(size_t) i] = v;
+        repaint (pedalRectLocal (i).toNearestInt().expanded (2));
+        if (closeUp != nullptr && closeUp->getPedalIndex() == i) closeUp->repaint();
+    }
     if (note.isNotEmpty() && juce::Time::getMillisecondCounter() > noteUntil)
     {
         note.clear();
@@ -290,6 +301,7 @@ void PedalboardTab::paint (juce::Graphics& g)
         PedalPainter::Look look;
         look.hover = (i == hoverPedal && hoverFootswitch < 0);
         look.footswitchHover = i == hoverPedal ? hoverFootswitch : -1;
+        look.liveCount = processor.pedalTelemetry (i, look.live.data());
         PedalPainter::draw (g, catalog()[(size_t) i], model.pedal (i), pedalRectLocal (i), look);
     }
 

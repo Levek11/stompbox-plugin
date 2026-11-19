@@ -31,6 +31,10 @@ public:
     /** Dual pedals: the second footswitch (called before process each block). */
     virtual void setSecondFootswitch (bool) noexcept {}
 
+    /** Live readings for the pedal's display (tuner note, gain reduction...).
+        Returns how many values were written to out (up to 4). Any thread. */
+    virtual int telemetry (float* /*out*/) const noexcept { return 0; }
+
     /** Stereo pedals turn a mono chain into a stereo one from here on. */
     virtual bool isStereo() const noexcept { return false; }
 
@@ -146,6 +150,71 @@ private:
 //==============================================================================
 /** Smooth diode-style limiter with separate thresholds per polarity.
     `knee` sets how hard the corner is (silicon diodes: about 2-2.5). */
+//==============================================================================
+/** Base for pedals that don't need oversampling (compressors, EQ): the same
+    click-free footswitch crossfade as DrivePedal, at the host sample rate. */
+class CleanPedal : public Pedal
+{
+public:
+    void prepare (double sampleRate, int maxBlock) override
+    {
+        fs = sampleRate;
+        dry.setSize (2, maxBlock);
+        fadeStep = 1.0f / (float) (0.015 * fs);
+        setRate (fs);
+        reset();
+    }
+
+    void reset() override
+    {
+        wet = 0.0f;
+        resetModel();
+    }
+
+    void process (float* const* ch, int numCh, int n, const float* v, bool on, const PedalContext&) noexcept override
+    {
+        const float target = on ? 1.0f : 0.0f;
+        if (wet == 0.0f && target == 0.0f)
+        {
+            idle();
+            return;   // fully bypassed: the signal passes untouched
+        }
+
+        for (int c = 0; c < numCh; ++c)
+            dry.copyFrom (c, 0, ch[c], n);
+
+        setControls (v);
+        for (int c = 0; c < numCh; ++c)
+            for (int i = 0; i < n; ++i)
+                ch[c][i] = (float) tick ((double) ch[c][i], c);
+
+        if (wet != target || wet < 1.0f)
+        {
+            float w = wet;
+            for (int i = 0; i < n; ++i)
+            {
+                w = target > w ? std::min (target, w + fadeStep) : std::max (target, w - fadeStep);
+                for (int c = 0; c < numCh; ++c)
+                    ch[c][i] = dry.getSample (c, i) + w * (ch[c][i] - dry.getSample (c, i));
+            }
+            wet = w;
+        }
+    }
+
+protected:
+    virtual void setRate (double sampleRate) = 0;
+    virtual void resetModel() = 0;
+    virtual void setControls (const float* values) noexcept = 0;
+    virtual double tick (double x, int channel) noexcept = 0;
+    virtual void idle() noexcept {}   // called instead of processing while bypassed
+
+    double fs = 48000.0;
+
+private:
+    juce::AudioBuffer<float> dry;
+    float wet = 0.0f, fadeStep = 0.001f;
+};
+
 inline double diodeClip (double v, double posThreshold, double negThreshold, double knee) noexcept
 {
     const double t = v >= 0.0 ? posThreshold : negThreshold;
@@ -157,6 +226,13 @@ inline double diodeClip (double v, double posThreshold, double negThreshold, dou
 inline double railClip (double v, double rail = 4.0) noexcept
 {
     return diodeClip (v, rail, rail, 6.0);
+}
+
+/** Output-level knob: -30 dB at 0, unity at noon, +15 dB at 10. */
+inline double levelKnob (double v) noexcept
+{
+    const double db = v < 0.5 ? (v - 0.5) * 60.0 : (v - 0.5) * 30.0;
+    return v <= 0.0 ? 0.0 : std::pow (10.0, db / 20.0);
 }
 
 inline double logTaper (double p, double decades = 2.0) noexcept

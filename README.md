@@ -11,10 +11,9 @@ cab IR. Built for worship guitar, built in the cloud.
 | 1 | Amp/Cab tab: dual Royal 30 + cab IR loader | Done |
 | 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | Done |
 | 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | Done |
-| 3 | Overdrives: Blue Highway, Scotland, Nutrient | **In this build** |
-| 4 | Compressors: Pacific 76, Silver 76, Fresh Squeeze | |
+| 3 | Overdrives: Blue Highway, Scotland, Nutrient | Done |
+| 4 + 6 | Compressors, tuner and EQ: Pacific 76, Silver 76, Fresh Squeeze, True Tone, Sculptor | **In this build** |
 | 5 | Time Machine, Open Sky | |
-| 6 | True Tone, Sculptor | |
 
 ## The pedalboard (2a)
 
@@ -27,6 +26,24 @@ cab IR. Built for worship guitar, built in the cloud.
 - A pedal put back on the shelf returns to its default settings.
 - Everything is saved with the Logic project. Pedals pass audio through
   unchanged until their sound arrives (step noted in each close-up).
+
+## Compressors, tuner and EQ (4 + 6)
+
+- **Pacific 76** (Cali76): 1176-style FET compressor. IN drives it, RATIO
+  4:1 to 20:1, ATTACK, RELEASE (program-dependent), OUT, and DRY for parallel
+  compression. The dots are a live gain-reduction meter (2 dB a dot).
+- **Silver 76** (UAFX 1176): INPUT / OUTPUT; ATTACK and RELEASE get faster
+  clockwise, as on the hardware; RATIO steps 4, 8, 12, 20 and ALL (all
+  buttons in). MODE: Single, Dual (two in series, smoother and deeper) or
+  Sustain. MIX blends in the dry signal (the hardware's parallel mode).
+- **Fresh Squeeze** (Pulp 'N' Peel V4): smooth OTA-style compression with
+  auto makeup; BLEND dry to fully compressed; EQ flat at noon; DIRT adds the
+  overdrive; lots of clean VOLUME.
+- **True Tone** (TU-3): chromatic tuner, accurate to well under a cent from
+  drop D to the high frets. Mutes the output while on, and arrives on the
+  board switched off.
+- **Sculptor** (GE-7): seven bands at 100 Hz to 6.4 kHz and LEVEL, each
+  +-15 dB; centred is flat.
 
 ## The first pedals (2b)
 

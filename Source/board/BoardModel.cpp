@@ -1,9 +1,13 @@
 #include "BoardModel.h"
 #include <algorithm>
 #include <limits>
+#include <cstring>
 
 namespace stompbox::board
 {
+
+/** Pedals arrive on the board switched on, except the tuner (it mutes while on). */
+static bool startsOn (int index) { return std::strcmp (catalog()[(size_t) index].id, "trueTone") != 0; }
 
 BoardModel::BoardModel()
 {
@@ -20,6 +24,7 @@ void BoardModel::clear()
         p = {};
         for (const auto& c : cat[i].controls)
             p.values.push_back (c.defaultValue);
+        p.on = p.onB = startsOn ((int) i);
     }
 }
 
@@ -162,7 +167,7 @@ void BoardModel::returnToShelf (int index)
     // Back on the shelf, a pedal goes back to its default settings.
     auto& p = pedals[(size_t) index];
     p.slot = -1;
-    p.on = p.onB = true;
+    p.on = p.onB = startsOn (index);
     const auto& defs = catalog()[(size_t) index].controls;
     for (size_t k = 0; k < defs.size(); ++k)
         p.values[k] = defs[k].defaultValue;

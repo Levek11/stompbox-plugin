@@ -48,6 +48,13 @@ public:
     /** Audio thread: Logic's tempo for synced pedals. */
     void setTempo (double bpm) noexcept { context.bpm = bpm; }
 
+    /** Any thread: a pedal's live readings (tuner note, gain reduction). */
+    int pedalTelemetry (int pedalIndex, float* out) const noexcept
+    {
+        const auto& p = pedals[(size_t) pedalIndex];
+        return p != nullptr ? p->telemetry (out) : 0;
+    }
+
     /** StompBox adds no latency: no lookahead anywhere in the chain. */
     static constexpr int latencySamples = 0;
 

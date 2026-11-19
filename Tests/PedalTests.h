@@ -4,6 +4,8 @@
 
 #include "dsp/pedals/DrivePedals.h"
 #include "dsp/pedals/Afterglow.h"
+#include "dsp/pedals/Dynamics.h"
+#include "dsp/pedals/Utility.h"
 #include "dsp/Engine.h"
 
 namespace pedaltests
@@ -329,6 +331,135 @@ void run (Check&& check)
         const auto off = run (false, false, 0.3);
         check (std::abs (off[30000] - (float) (0.3 * std::sin (2.0 * pi * 220.0 * 30000 / 48000.0))) < 1.0e-6f,
                "Nutrient: both footswitches off = untouched");
+    }
+
+    // --- Batch 4: compressors, tuner, EQ ------------------------------------------
+    std::cout << "\nCompressors, tuner and EQ\n";
+
+    /** Steady-state gain (dB) of a sine through a pedal. */
+    auto gainDb = [] (Pedal& p, const std::vector<float>& v, double amp, double hz = 220.0)
+    {
+        const double fs = 48000.0;
+        p.prepare (fs, 256);
+        const int n = (int) fs;
+        std::vector<float> buf ((size_t) n);
+        for (int i = 0; i < n; ++i) buf[(size_t) i] = (float) (amp * std::sin (2.0 * pi * hz * i / fs));
+        double inSq = 0, outSq = 0;
+        for (int i = n / 2; i < n; ++i) inSq += (double) buf[(size_t) i] * buf[(size_t) i];
+        for (int i = 0; i < n; i += 256) { float* ch[1] = { buf.data() + i }; p.process (ch, 1, std::min (256, n - i), v.data(), true, {}); }
+        for (int i = n / 2; i < n; ++i) outSq += (double) buf[(size_t) i] * buf[(size_t) i];
+        return 10.0 * std::log10 (outSq / inSq);
+    };
+    /** How many dB the output moves when the input moves 24 dB (less = more compression). */
+    auto range = [&] (Pedal& p, const std::vector<float>& v)
+    {
+        // output dB at 0.32 minus output dB at 0.02 (input differs by 24 dB)
+        return (gainDb (p, v, 0.32) + 20.0 * std::log10 (0.32)) - (gainDb (p, v, 0.02) + 20.0 * std::log10 (0.02));
+    };
+
+    {
+        Pacific76 p; auto v = defaults ("pacific76");
+        const double r = range (p, v);
+        set (v, "pacific76", "ratio", 0.0f); const double r4 = range (p, v);
+        set (v, "pacific76", "ratio", 1.0f); const double r20 = range (p, v);
+        const double db = gainDb (p, defaults ("pacific76"), 0.3);
+        std::cout << "    Pacific 76: 24 dB in -> " << juce::String (r, 1) << " dB out (4:1 " << juce::String (r4, 1)
+                  << ", 20:1 " << juce::String (r20, 1) << "), level " << juce::String (db, 1) << " dB\n";
+        check (r < 16.0 && r20 < r4, "Pacific 76: compresses, and harder at higher Ratio");
+        auto w = defaults ("pacific76"); set (w, "pacific76", "dry", 1.0f);
+        check (range (p, w) > r + 2.0, "Pacific 76: Dry blends the uncompressed attack back in");
+        float t[4]; gainDb (p, defaults ("pacific76"), 0.3); p.telemetry (t);
+        check (db > -8.0 && db < 8.0 && t[0] > 2.0f && bypassExact (p, defaults ("pacific76")),
+               "Pacific 76: default level, gain-reduction meter reads " + juce::String (t[0], 1) + " dB, off = untouched");
+    }
+
+    {
+        Silver76 p; auto v = defaults ("silver76");
+        const double single = range (p, v);
+        set (v, "silver76", "mode", 0.5f); const double dual = range (p, v);
+        auto a = defaults ("silver76"); const double clean = thd (p, a, 0.3);
+        set (a, "silver76", "ratio", 1.0f); const double all = thd (p, a, 0.3);
+        const double db = gainDb (p, defaults ("silver76"), 0.3);
+        std::cout << "    Silver 76: 24 dB in -> " << juce::String (single, 1) << " dB (single) / " << juce::String (dual, 1)
+                  << " dB (dual); THD 4:1 " << juce::String (clean, 2) << "%, ALL " << juce::String (all, 1) << "%; level "
+                  << juce::String (db, 1) << " dB\n";
+        check (single < 16.0 && dual < single, "Silver 76: compresses; Dual compresses deeper");
+        check (all > clean * 3.0, "Silver 76: all buttons in is grittier");
+        auto m = defaults ("silver76"); set (m, "silver76", "mix", 0.0f);
+        check (std::abs (gainDb (p, m, 0.3)) < 0.5, "Silver 76: Mix 0 = dry");
+        check (db > -8.0 && db < 8.0 && bypassExact (p, defaults ("silver76")), "Silver 76: default level, off = untouched");
+    }
+
+    {
+        FreshSqueeze p; auto v = defaults ("freshSqueeze");
+        set (v, "freshSqueeze", "blend", 1.0f);
+        set (v, "freshSqueeze", "comp", 0.2f); const double light = range (p, v);
+        set (v, "freshSqueeze", "comp", 0.9f); const double heavy = range (p, v);
+        auto d = defaults ("freshSqueeze"); set (d, "freshSqueeze", "blend", 0.0f);
+        const double dryDb = gainDb (p, d, 0.3);
+        auto c = defaults ("freshSqueeze"); const double cleanThd = thd (p, c, 0.3);
+        set (c, "freshSqueeze", "dirt", 1.0f); const double dirtThd = thd (p, c, 0.3);
+        const double db = gainDb (p, defaults ("freshSqueeze"), 0.3);
+        std::cout << "    Fresh Squeeze: 24 dB in -> " << juce::String (light, 1) << " dB (comp 2) / " << juce::String (heavy, 1)
+                  << " dB (comp 9); THD clean " << juce::String (cleanThd, 2) << "%, dirt " << juce::String (dirtThd, 1)
+                  << "%; level " << juce::String (db, 1) << " dB\n";
+        check (heavy < light && heavy < 14.0, "Fresh Squeeze: more Comp = more squeeze");
+        check (std::abs (dryDb) < 0.5, "Fresh Squeeze: Blend fully left = your dry tone");
+        check (dirtThd > cleanThd * 3.0, "Fresh Squeeze: Dirt adds overdrive");
+        check (db > -8.0 && db < 8.0 && bypassExact (p, defaults ("freshSqueeze")), "Fresh Squeeze: default level, off = untouched");
+    }
+
+    {
+        // Tuner: guitar-like notes (fundamental + harmonics), read within 2 cents.
+        auto read = [] (double hz)
+        {
+            TrueTone t; const double fs = 48000.0; t.prepare (fs, 256);
+            const int n = (int) (fs * 0.6);
+            std::vector<float> buf ((size_t) n);
+            for (int i = 0; i < n; ++i)
+            {
+                const double ph = 2.0 * pi * hz * i / fs;
+                buf[(size_t) i] = (float) (0.2 * std::sin (ph) + 0.15 * std::sin (2 * ph + 0.3) + 0.08 * std::sin (3 * ph + 1.0) + 0.04 * std::sin (4 * ph));
+            }
+            float peakOut = 0.0f;
+            for (int i = 0; i < n; i += 256)
+            {
+                float* ch[1] = { buf.data() + i };
+                t.process (ch, 1, std::min (256, n - i), nullptr, true, {});
+                if (i > (int) (0.05 * fs)) for (int k = 0; k < std::min (256, n - i); ++k) peakOut = std::max (peakOut, std::abs (ch[0][k]));
+            }
+            return std::make_pair (t.readingHz(), peakOut);
+        };
+        double worst = 0.0; bool muted = true;
+        for (double hz : { 73.42, 82.41, 110.0, 146.83, 196.0, 246.94, 329.63, 440.0, 659.26 })
+        {
+            const auto [r, peak] = read (hz);
+            worst = std::max (worst, r > 0 ? std::abs (1200.0 * std::log2 (r / hz)) : 1000.0);
+            muted = muted && peak < 1.0e-6f;
+        }
+        const auto [sharp, unused] = read (110.0 * std::pow (2.0, 15.0 / 1200.0));
+        juce::ignoreUnused (unused);
+        const double sharpCents = 1200.0 * std::log2 (sharp / 110.0);
+        std::cout << "    True Tone: worst error D2..E5 " << juce::String (worst, 2) << " cents; A +15 cents reads +"
+                  << juce::String (sharpCents, 1) << "\n";
+        check (worst < 1.0 && std::abs (sharpCents - 15.0) < 1.0, "True Tone: reads every string within 1 cent");
+        check (muted, "True Tone: output muted while tuning");
+        TrueTone t; std::vector<float> v (4, 0.0f);
+        check (bypassExact (t, v), "True Tone: off = signal untouched");
+    }
+
+    {
+        Sculptor p; auto v = defaults ("sculptor");
+        const double flat1k = gainDb (p, v, 0.1, 1000.0), flat100 = gainDb (p, v, 0.1, 100.0);
+        set (v, "sculptor", "b800", 1.0f);
+        const double boost = gainDb (p, v, 0.1, 800.0), off = gainDb (p, v, 0.1, 100.0);
+        auto l = defaults ("sculptor"); set (l, "sculptor", "level", 0.0f);
+        const double lvl = gainDb (p, l, 0.1, 1000.0);
+        std::cout << "    Sculptor: flat " << juce::String (flat1k, 2) << " / " << juce::String (flat100, 2) << " dB; 800 Hz +15 -> "
+                  << juce::String (boost, 1) << " dB (100 Hz " << juce::String (off, 1) << "); level min " << juce::String (lvl, 1) << " dB\n";
+        check (std::abs (flat1k) < 0.1 && std::abs (flat100) < 0.1, "Sculptor: centred sliders are flat");
+        check (std::abs (boost - 15.0) < 1.5 && std::abs (off) < 1.5, "Sculptor: bands boost +15 dB where they should");
+        check (std::abs (lvl + 15.0) < 0.2 && bypassExact (p, defaults ("sculptor")), "Sculptor: Level -15 dB, off = untouched");
     }
 
     // --- Chain ------------------------------------------------------------------

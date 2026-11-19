@@ -36,6 +36,7 @@ public:
 
 private:
     void timerCallback() override;
+    std::array<std::array<float, 4>, (size_t) stompbox::board::numPedals> shownLive {};
     void refreshModel();
     void updateGeometry();
 

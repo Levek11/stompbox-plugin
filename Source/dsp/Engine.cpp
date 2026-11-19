@@ -1,6 +1,8 @@
 #include "Engine.h"
 #include "pedals/DrivePedals.h"
 #include "pedals/Afterglow.h"
+#include "pedals/Dynamics.h"
+#include "pedals/Utility.h"
 
 namespace stompbox
 {
@@ -21,6 +23,11 @@ Engine::Engine()
     pedals[(size_t) board::indexOf ("blueHighway")] = std::make_unique<dsp::BlueHighway>();
     pedals[(size_t) board::indexOf ("scotland")]   = std::make_unique<dsp::Scotland>();
     pedals[(size_t) board::indexOf ("nutrient")]   = std::make_unique<dsp::Nutrient>();
+    pedals[(size_t) board::indexOf ("pacific76")]  = std::make_unique<dsp::Pacific76>();
+    pedals[(size_t) board::indexOf ("silver76")]   = std::make_unique<dsp::Silver76>();
+    pedals[(size_t) board::indexOf ("freshSqueeze")] = std::make_unique<dsp::FreshSqueeze>();
+    pedals[(size_t) board::indexOf ("trueTone")]   = std::make_unique<dsp::TrueTone>();
+    pedals[(size_t) board::indexOf ("sculptor")]   = std::make_unique<dsp::Sculptor>();
 
     const auto& cat = board::catalog();
     for (size_t i = 0; i < cat.size(); ++i)

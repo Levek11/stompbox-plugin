@@ -74,6 +74,7 @@ public:
             ~Bump()
             {
                 ++p.boardVersion;
+
                 p.engine.setBoard (p.getBoard());
                 if (juce::MessageManager::existsAndIsCurrentThread())
                     p.updateHostDisplay (juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged (true));
@@ -88,6 +89,9 @@ public:
         return board;
     }
     int getBoardVersion() const noexcept { return boardVersion.load(); }
+
+    /** Any thread: live pedal readings (tuner, gain reduction) for the UI. */
+    int pedalTelemetry (int pedalIndex, float* out) const noexcept { return engine.pedalTelemetry (pedalIndex, out); }
 
 private:
     void applyIRs();
