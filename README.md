@@ -12,8 +12,8 @@ cab IR. Built for worship guitar, built in the cloud.
 | 2a | Pedalboard: board, shelf, drag and drop, cables, close-up | Done |
 | 2b | First pedal sounds: Hot Rod, Golden Hour, Afterglow | Done |
 | 3 | Overdrives: Blue Highway, Scotland, Nutrient | Done |
-| 4 + 6 | Compressors, tuner and EQ: Pacific 76, Silver 76, Fresh Squeeze, True Tone, Sculptor | **In this build** |
-| 5 | Time Machine, Open Sky | |
+| 4 + 6 | Compressors, tuner and EQ: Pacific 76, Silver 76, Fresh Squeeze, True Tone, Sculptor | Done |
+| 5 | Time Machine, Open Sky | **In this build** |
 
 ## The pedalboard (2a)
 
@@ -26,6 +26,28 @@ cab IR. Built for worship guitar, built in the cloud.
 - A pedal put back on the shelf returns to its default settings.
 - Everything is saved with the Logic project. Pedals pass audio through
   unchanged until their sound arrives (step noted in each close-up).
+
+## Open Sky and Time Machine (5)
+
+Both are stereo, keep their trails when switched off, and use a Strymon-style
+MIX (dry full up to noon, 100% wet fully clockwise). Turn TYPE to pick a
+machine; the screen and the close-up labels follow it.
+
+- **Open Sky** (BigSky): Room, Hall, Plate, Swell, Bloom, Cloud, Shimmer.
+  DECAY reads in seconds and the tail measures within a few percent of it;
+  PRE-DELAY 0-1.5 s; TONE sets how long the highs ring; MOD; LEVEL +-6 dB.
+  PARAM 1 / 2 per machine: Room Low End / Diffusion; Hall Low End / Size
+  (Concert, Arena); Plate Low End / Size (Small, Large); Swell Rise / Low End;
+  Bloom Length / Feedback; Cloud Diffusion / Low End; Shimmer Amount / Shift
+  (octave up by default). Mono-safe stereo: the two sides are decorrelated
+  but never out of phase.
+- **Time Machine** (TimeLine): Digital, dTape, dBucket, Dual, Ice, Swell,
+  Duck. TIME syncs to Logic's tempo (1/16 to 1/2, dotted and triplets;
+  dotted eighth by default) or, with SYNC on FREE, runs in ms. FILTER, GRIT,
+  SPEED, DEPTH work as on the TimeLine; on dTape they become Tape Age, Tape
+  Bias, Crinkle and Wow & Flutter. TWEAK: Digital Smear, dTape Low End,
+  dBucket Range, Dual Time 2 ratio (4:3 = dotted eighth + quarter), Ice
+  Interval, Swell Rise, Duck Sensitivity.
 
 ## Compressors, tuner and EQ (4 + 6)
 

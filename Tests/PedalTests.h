@@ -6,6 +6,8 @@
 #include "dsp/pedals/Afterglow.h"
 #include "dsp/pedals/Dynamics.h"
 #include "dsp/pedals/Utility.h"
+#include "dsp/pedals/OpenSky.h"
+#include "dsp/pedals/TimeMachine.h"
 #include "dsp/Engine.h"
 
 namespace pedaltests
@@ -460,6 +462,425 @@ void run (Check&& check)
         check (std::abs (flat1k) < 0.1 && std::abs (flat100) < 0.1, "Sculptor: centred sliders are flat");
         check (std::abs (boost - 15.0) < 1.5 && std::abs (off) < 1.5, "Sculptor: bands boost +15 dB where they should");
         check (std::abs (lvl + 15.0) < 0.2 && bypassExact (p, defaults ("sculptor")), "Sculptor: Level -15 dB, off = untouched");
+    }
+
+    // --- Batch 5: Open Sky and Time Machine -----------------------------------------
+    std::cout << "\nOpen Sky and Time Machine\n";
+    namespace mc = board::machines;
+
+    /** Runs a stereo pedal over L/R buffers (in place), in 256-sample blocks. */
+    auto runStereo = [] (Pedal& p, std::vector<float>& l, std::vector<float>& r, const std::vector<float>& v,
+                         double bpm = 120.0, bool on = true, int from = 0, int to = -1)
+    {
+        const int n = to < 0 ? (int) l.size() : to;
+        PedalContext ctx; ctx.bpm = bpm;
+        for (int i = from; i < n; i += 256)
+        {
+            float* ch[2] = { l.data() + i, r.data() + i };
+            p.process (ch, 2, std::min (256, n - i), v.data(), on, ctx);
+        }
+    };
+    auto typeValue = [] (int machine, int count) { return (float) machine / (float) (count - 1); };
+    auto rms = [] (const std::vector<float>& x, int a, int b)
+    {
+        double e = 0; for (int i = a; i < b; ++i) e += (double) x[(size_t) i] * x[(size_t) i];
+        return std::sqrt (e / std::max (1, b - a));
+    };
+    /** RT60 (s) from the Schroeder backward integral, fitted between -5 and -25 dB. */
+    auto rt60 = [] (const std::vector<float>& x, int start, double fsr)
+    {
+        std::vector<double> sch (x.size() - (size_t) start + 1, 0.0);
+        for (int i = (int) x.size() - 1; i >= start; --i)
+            sch[(size_t) (i - start)] = sch[(size_t) (i - start + 1)] + (double) x[(size_t) i] * x[(size_t) i];
+        const double total = sch[0];
+        int a = -1, b = -1;
+        for (size_t i = 0; i < sch.size(); ++i)
+        {
+            const double db = 10.0 * std::log10 (sch[i] / total + 1e-30);
+            if (a < 0 && db < -5.0) a = (int) i;
+            if (b < 0 && db < -25.0) { b = (int) i; break; }
+        }
+        if (a < 0 || b < 0) return -1.0;
+        return 3.0 * (b - a) / fsr;   // 20 dB took (b - a): 60 dB takes 3x
+    };
+    auto goertzel = [] (const std::vector<float>& x, int a, int b, double hz, double fsr)
+    {
+        const double w = 2.0 * pi * hz / fsr, c = 2.0 * std::cos (w);
+        double s1 = 0, s2 = 0;
+        for (int i = a; i < b; ++i)
+        {
+            const double win = 0.5 - 0.5 * std::cos (2.0 * pi * (i - a) / (b - a));
+            const double s0 = x[(size_t) i] * win + c * s1 - s2; s2 = s1; s1 = s0;
+        }
+        return std::sqrt (std::max (0.0, s1 * s1 + s2 * s2 - c * s1 * s2)) / (b - a);
+    };
+
+    {
+        const double fsr = 48000.0;
+        // Decay accuracy: the tail's RT60 should read what the display says.
+        struct Case { int m; float decay; };
+        double worst = 0.0;
+        juce::String report;
+        for (auto cs : { Case { mc::room, 0.45f }, Case { mc::hall, 0.45f }, Case { mc::plate, 0.45f }, Case { mc::hall, 0.65f },
+                         Case { mc::swell, 0.45f }, Case { mc::shimmer, 0.45f } })
+        {
+            OpenSky p; p.prepare (fsr, 256);
+            auto v = defaults ("openSky");
+            set (v, "openSky", "type", typeValue (cs.m, mc::numReverbs));
+            set (v, "openSky", "decay", cs.decay);
+            set (v, "openSky", "mix", 1.0f);
+            set (v, "openSky", "predelay", 0.0f);
+            set (v, "openSky", "mod", 0.0f);
+            if (cs.m == mc::shimmer) set (v, "openSky", "param1", 0.0f);   // amount 0: the plain tank
+            const double target = mc::decaySeconds (cs.m, cs.decay);
+            const int n = (int) (fsr * (target * 1.3 + 0.5));
+            std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+            Noise nz;
+            for (int i = 0; i < (int) (0.01 * fsr); ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.3 * nz.next());
+            runStereo (p, l, r, v);
+            // Measured in the mids (300 Hz - 1.5 kHz), as RT60 is quoted.
+            std::vector<float> m ((size_t) n);
+            Biquad bl, bh; bl.setLowpass (1500.0, 0.707, fsr); bh.setHighpass (300.0, 0.707, fsr);
+            for (int i = 0; i < n; ++i) m[(size_t) i] = (float) bh.process (bl.process (0.5 * (l[(size_t) i] + r[(size_t) i])));
+            const double measured = rt60 (m, (int) (0.05 * fsr), fsr);
+            const double err = std::abs (measured / target - 1.0);
+            worst = std::max (worst, err);
+            report << mc::reverbNames[cs.m] << " " << juce::String (target, 2) << "->" << juce::String (measured, 2) << "s  ";
+        }
+        std::cout << "    Open Sky RT60 (set->measured): " << report << "\n";
+        check (worst < 0.1, "Open Sky: decay times match the display (within 10%)");
+    }
+
+    {
+        // Every machine at defaults: a sensible wet level, a wide stereo field, finite.
+        const double fsr = 48000.0;
+        juce::String report;
+        bool levelsOk = true, wide = true;
+        for (int m = 0; m < mc::numReverbs; ++m)
+        {
+            OpenSky p; p.prepare (fsr, 256);
+            auto v = defaults ("openSky");
+            set (v, "openSky", "type", typeValue (m, mc::numReverbs));
+            set (v, "openSky", "mix", 1.0f);
+            const int n = (int) (fsr * 3.0);
+            std::vector<float> l ((size_t) n), r ((size_t) n), dry ((size_t) n);
+            for (int i = 0; i < n; ++i)
+            {
+                // a strummed chord, twice
+                const double t = (double) (i % (int) (1.5 * fsr)) / fsr;
+                const double env = std::exp (-t * 3.0);
+                dry[(size_t) i] = (float) (0.25 * env * (std::sin (2 * pi * 196.0 * i / fsr) + 0.7 * std::sin (2 * pi * 247.0 * i / fsr) + 0.5 * std::sin (2 * pi * 294.0 * i / fsr)));
+                l[(size_t) i] = r[(size_t) i] = dry[(size_t) i];
+            }
+            runStereo (p, l, r, v);
+            const double wetDb = 20.0 * std::log10 (0.5 * (rms (l, n / 3, n) + rms (r, n / 3, n)) / rms (dry, n / 3, n));
+            double num = 0, el = 0, er2 = 0;
+            for (int i = n / 3; i < n; ++i) { num += (double) l[(size_t) i] * r[(size_t) i]; el += (double) l[(size_t) i] * l[(size_t) i]; er2 += (double) r[(size_t) i] * r[(size_t) i]; }
+            const double corr = num / std::sqrt (el * er2 + 1e-30);
+            levelsOk = levelsOk && wetDb > -16.0 && wetDb < 3.0 && std::isfinite (wetDb);
+            wide = wide && corr < 0.5 && corr > -0.35;
+            report << mc::reverbNames[m] << " " << juce::String (wetDb, 1) << "dB/" << juce::String (corr, 2) << "  ";
+        }
+        std::cout << "    Open Sky wet level / L-R correlation: " << report << "\n";
+        check (levelsOk, "Open Sky: every machine's wet level is sensible at its defaults");
+        check (wide, "Open Sky: a wide stereo tail from a mono guitar, safe in mono (never out of phase)");
+    }
+
+    {
+        // Stability: the most extreme settings stay finite and bounded.
+        const double fsr = 48000.0;
+        bool ok = true; float worstPeak = 0.0f;
+        for (int m = 0; m < mc::numReverbs; ++m)
+        {
+            OpenSky p; p.prepare (fsr, 256);
+            auto v = defaults ("openSky");
+            set (v, "openSky", "type", typeValue (m, mc::numReverbs));
+            for (const char* id : { "decay", "mix", "param1", "param2", "mod", "level", "tone" }) set (v, "openSky", id, 1.0f);
+            const int n = (int) (fsr * 12.0);
+            std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+            Noise nz;
+            for (int i = 0; i < (int) (fsr * 3.0); ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.5 * nz.next());
+            runStereo (p, l, r, v);
+            float pk = 0.0f;
+            for (int i = 0; i < n; ++i) { ok = ok && std::isfinite (l[(size_t) i]) && std::isfinite (r[(size_t) i]); pk = std::max (pk, std::abs (l[(size_t) i])); }
+            worstPeak = std::max (worstPeak, pk);
+        }
+        std::cout << "    Open Sky worst peak at extreme settings: " << juce::String (worstPeak, 2) << "\n";
+        check (ok && worstPeak < 8.0f, "Open Sky: every machine at full settings stays bounded");
+    }
+
+    {
+        const double fsr = 48000.0;
+        // Pre-delay: nothing in the wet before the pre-delay, then the reverb.
+        OpenSky p; p.prepare (fsr, 256);
+        auto v = defaults ("openSky");
+        set (v, "openSky", "type", typeValue (mc::plate, mc::numReverbs));
+        set (v, "openSky", "mix", 1.0f);
+        const float pre = std::cbrt (0.2f / 1.5f);   // 200 ms
+        set (v, "openSky", "predelay", pre);
+        const int n = (int) (fsr * 0.6);
+        std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+        l[100] = r[100] = 1.0f;
+        runStereo (p, l, r, v);
+        int first = -1;
+        for (int i = 0; i < n && first < 0; ++i) if (std::abs (l[(size_t) i]) > 1e-4f || std::abs (r[(size_t) i]) > 1e-4f) first = i;
+        const double ms = (first - 100) / fsr * 1000.0;
+        std::cout << "    Open Sky pre-delay 200 ms: wet starts at " << juce::String (ms, 1) << " ms\n";
+        check (ms > 195.0 && ms < 215.0, "Open Sky: pre-delay holds the reverb back by the set time");
+    }
+
+    {
+        const double fsr = 48000.0;
+        // Shimmer: an octave above the note builds in the tail.
+        auto octave = [&] (float amount)
+        {
+            OpenSky p; p.prepare (fsr, 256);
+            auto v = defaults ("openSky");
+            set (v, "openSky", "type", typeValue (mc::shimmer, mc::numReverbs));
+            set (v, "openSky", "mix", 1.0f);
+            set (v, "openSky", "param1", amount);
+            const int n = (int) (fsr * 4.0);
+            std::vector<float> l ((size_t) n), r ((size_t) n);
+            for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = i < fsr * 2 ? (float) (0.2 * std::sin (2 * pi * 220.0 * i / fsr)) : 0.0f;
+            runStereo (p, l, r, v);
+            const int a = (int) (fsr * 2.2), b = (int) (fsr * 3.2);
+            return goertzel (l, a, b, 440.0, fsr) / (goertzel (l, a, b, 220.0, fsr) + 1e-12);
+        };
+        const double none = octave (0.0f), full = octave (0.8f);
+        std::cout << "    Shimmer octave-up vs fundamental in the tail: amount 0 " << juce::String (none, 3) << ", amount 8 " << juce::String (full, 2) << "\n";
+        check (full > 0.5 && full > none * 20.0, "Open Sky Shimmer: the octave up blooms in the tail");
+    }
+
+    {
+        const double fsr = 48000.0;
+        // Swell: the reverb fades in behind the note.
+        OpenSky p; p.prepare (fsr, 256);
+        auto v = defaults ("openSky");
+        set (v, "openSky", "type", typeValue (mc::swell, mc::numReverbs));
+        set (v, "openSky", "mix", 1.0f);
+        set (v, "openSky", "param1", 0.70f);   // rise ~1.2 s
+        const int n = (int) (fsr * 2.5);
+        std::vector<float> l ((size_t) n), r ((size_t) n);
+        for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.2 * std::sin (2 * pi * 196.0 * i / fsr));
+        runStereo (p, l, r, v);
+        const double early = rms (l, 0, (int) (0.25 * fsr)), late = rms (l, (int) (1.5 * fsr), (int) (2.0 * fsr));
+        std::cout << "    Swell: first 250 ms vs 1.5-2 s: " << juce::String (20.0 * std::log10 (early / late), 1) << " dB\n";
+        check (early < late * 0.25, "Open Sky Swell: the reverb swells in");
+    }
+
+    {
+        const double fsr = 48000.0;
+        // Trails, and an idle pedal passes the signal untouched.
+        OpenSky p; p.prepare (fsr, 256);
+        auto v = defaults ("openSky");
+        const int n = (int) (fsr * 2.0);
+        std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+        for (int i = 0; i < (int) (0.5 * fsr); ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.3 * std::sin (2 * pi * 220.0 * i / fsr));
+        runStereo (p, l, r, v, 120.0, true, 0, (int) (0.5 * fsr));
+        runStereo (p, l, r, v, 120.0, false, (int) (0.5 * fsr), n);
+        const double tail = rms (l, (int) (0.7 * fsr), (int) (1.0 * fsr));
+        std::vector<float> a (512, 0.123f), b (512, 0.123f);
+        OpenSky q; q.prepare (fsr, 512);
+        float* chs[2] = { a.data(), b.data() };
+        q.process (chs, 2, 512, v.data(), false, {});
+        check (tail > 1e-3 && a[100] == 0.123f && b[511] == 0.123f, "Open Sky: trails ring out when switched off; off = untouched");
+    }
+
+    // --- Time Machine ----------------------------------------------------------------
+    /** First repeat time (ms) on each side, from an impulse. */
+    auto firstRepeat = [&] (std::vector<float> v, double bpm, double& leftMs, double& rightMs)
+    {
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        const int n = (int) (fsr * 3.0);
+        std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+        l[1000] = r[1000] = 1.0f;
+        runStereo (p, l, r, v, bpm);
+        auto find = [&] (const std::vector<float>& x)
+        {
+            int best = 1001; float pk = 0.0f;
+            for (int i = 1100; i < n; ++i) if (std::abs (x[(size_t) i]) > pk) { pk = std::abs (x[(size_t) i]); best = i; }
+            return (best - 1000) / fsr * 1000.0;
+        };
+        leftMs = find (l); rightMs = find (r);
+    };
+    auto tmClean = [&] (int machine)
+    {
+        auto v = defaults ("timeMachine");
+        set (v, "timeMachine", "type", typeValue (machine, mc::numDelays));
+        set (v, "timeMachine", "mix", 1.0f);
+        set (v, "timeMachine", "repeats", 0.0f);
+        set (v, "timeMachine", "filter", 0.0f);
+        set (v, "timeMachine", "depth", 0.0f);
+        set (v, "timeMachine", "tweak", 0.0f);
+        return v;
+    };
+
+    {
+        // Tempo sync: each note value at 120 BPM, and following a tempo change.
+        bool ok = true; juce::String report;
+        for (int d = 0; d < mc::numDivisions; ++d)
+        {
+            auto v = tmClean (mc::digital);
+            set (v, "timeMachine", "time", typeValue (d, mc::numDivisions));
+            double lms, rms2; firstRepeat (v, 120.0, lms, rms2);
+            const double want = 500.0 * mc::divisionBeats[d];
+            ok = ok && std::abs (lms - want) < 1.0 && std::abs (rms2 - want) < 1.0;
+            report << mc::divisionNames[d] << "=" << juce::String (lms, 1) << " ";
+        }
+        auto v = tmClean (mc::digital);
+        double a, b; firstRepeat (v, 90.0, a, b);
+        std::cout << "    Time Machine at 120 BPM (ms): " << report << "; D1/8 at 90 BPM = " << juce::String (a, 1) << "\n";
+        check (ok && std::abs (a - 500.0) < 1.0, "Time Machine: synced note values land on the beat (within 1 ms)");
+
+        set (v, "timeMachine", "sync", 1.0f);
+        set (v, "timeMachine", "time", (float) (std::log (500.0 / 60.0) / std::log (2500.0 / 60.0)));
+        firstRepeat (v, 120.0, a, b);
+        check (std::abs (a - 500.0) < 1.0, "Time Machine: FREE mode, 500 ms (" + juce::String (a, 1) + ")");
+    }
+
+    {
+        // Dual: Delay 1 left, Delay 2 right at 4:3 -> dotted eighth and quarter.
+        auto v = tmClean (mc::dual);
+        set (v, "timeMachine", "tweak", 0.5f);
+        double a, b; firstRepeat (v, 120.0, a, b);
+        std::cout << "    Dual at 120 BPM: L " << juce::String (a, 1) << " ms, R " << juce::String (b, 1) << " ms\n";
+        check (std::abs (a - 375.0) < 1.0 && std::abs (b - 500.0) < 1.0, "Time Machine Dual: D1/8 left, 1/4 right at 4:3");
+    }
+
+    {
+        // Digital with FILTER at minimum: the repeat is the note, clean.
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        auto v = tmClean (mc::digital);
+        set (v, "timeMachine", "repeats", 0.5f);
+        const int n = (int) (fsr * 1.5);
+        std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+        for (int i = 0; i < 2400; ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.3 * std::sin (2 * pi * 1000.0 * i / fsr) * std::sin (pi * i / 2400.0));
+        auto in = l;
+        runStereo (p, l, r, v);
+        const int d = (int) (0.375 * fsr);
+        double err = 0, ref = 0;
+        for (int i = 0; i < 2400; ++i) { err += std::pow (l[(size_t) (i + d)] - in[(size_t) i], 2.0); ref += std::pow (in[(size_t) i], 2.0); }
+        const double second = rms (l, 2 * d, 2 * d + 2400) / rms (l, d, d + 2400);
+        std::cout << "    Digital: first repeat error " << juce::String (10.0 * std::log10 (err / ref + 1e-30), 1) << " dB, second repeat "
+                  << juce::String (20.0 * std::log10 (second), 1) << " dB\n";
+        check (err / ref < 1e-3 && second < 0.7 && second > 0.3, "Time Machine Digital: clean, exact repeats; REPEATS sets the decay");
+    }
+
+    {
+        // FILTER darkens the repeats (noon), dBucket darkens with longer delay times.
+        const double fsr = 48000.0;
+        auto brightness = [&] (std::vector<float> v)
+        {
+            TimeMachine p; p.prepare (fsr, 256);
+            const int n = (int) (fsr * 2.0);
+            std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+            Noise nz; for (int i = 0; i < 2400; ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.2 * nz.next());
+            runStereo (p, l, r, v);
+            std::vector<float> rep (l.begin() + 2400, l.end());
+            int a = 0; float pk = 0; for (size_t i = 0; i < rep.size(); ++i) if (std::abs (rep[i]) > pk) { pk = std::abs (rep[i]); a = (int) i; }
+            a = std::max (0, a - 2000);
+            return goertzel (rep, a, a + 4800, 4000.0, fsr) / (goertzel (rep, a, a + 4800, 400.0, fsr) + 1e-12);
+        };
+        auto flat = tmClean (mc::digital), dark = tmClean (mc::digital);
+        set (dark, "timeMachine", "filter", 0.55f);
+        auto bShort = tmClean (mc::dBucket), bLong = tmClean (mc::dBucket);
+        set (bShort, "timeMachine", "filter", 0.5f); set (bLong, "timeMachine", "filter", 0.5f);
+        set (bShort, "timeMachine", "sync", 1.0f); set (bLong, "timeMachine", "sync", 1.0f);
+        set (bShort, "timeMachine", "time", 0.2f); set (bLong, "timeMachine", "time", 0.95f);
+        const double f = brightness (flat), d = brightness (dark), s = brightness (bShort), lg = brightness (bLong);
+        std::cout << "    4 kHz / 400 Hz in the repeat: flat " << juce::String (f, 2) << ", filter noon " << juce::String (d, 3)
+                  << "; dBucket short " << juce::String (s, 3) << ", long " << juce::String (lg, 3) << "\n";
+        check (d < f * 0.2, "Time Machine FILTER: noon darkens the repeats");
+        check (lg < s * 0.5, "Time Machine dBucket: longer delays are darker, like a real BBD");
+    }
+
+    {
+        // Ice: the repeats carry the shifted interval (an octave up by default).
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        auto v = tmClean (mc::ice);
+        set (v, "timeMachine", "tweak", 0.5f);
+        const int n = (int) (fsr * 1.2);
+        std::vector<float> l ((size_t) n), r ((size_t) n);
+        for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = i < (int) (0.6 * fsr) ? (float) (0.2 * std::sin (2 * pi * 220.0 * i / fsr)) : 0.0f;
+        runStereo (p, l, r, v);
+        const int a = (int) (0.5 * fsr), b = (int) (0.9 * fsr);
+        const double ratio = goertzel (l, a, b, 440.0, fsr) / (goertzel (l, a, b, 220.0, fsr) + 1e-12);
+        std::cout << "    Ice: octave-up vs note in the repeats " << juce::String (ratio, 2) << "\n";
+        check (ratio > 0.6, "Time Machine Ice: the repeats carry the octave");
+    }
+
+    {
+        // Duck: repeats tucked under the playing, back up when you stop.
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        auto v = tmClean (mc::duck);
+        set (v, "timeMachine", "tweak", 0.7f);
+        set (v, "timeMachine", "repeats", 0.6f);
+        const int n = (int) (fsr * 3.0);
+        std::vector<float> l ((size_t) n), r ((size_t) n);
+        for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = i < (int) (1.5 * fsr) ? (float) (0.2 * std::sin (2 * pi * 220.0 * i / fsr)) : 0.0f;
+        runStereo (p, l, r, v);
+        const double playing = rms (l, (int) (1.0 * fsr), (int) (1.5 * fsr)), after = rms (l, (int) (1.7 * fsr), (int) (2.0 * fsr));
+        std::cout << "    Duck: repeats while playing vs after: " << juce::String (20.0 * std::log10 (playing / after), 1) << " dB\n";
+        check (playing < after * 0.5, "Time Machine Duck: repeats duck under the playing");
+    }
+
+    {
+        // Swell: the delays fade in.
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        auto v = tmClean (mc::dSwell);
+        set (v, "timeMachine", "tweak", 0.6f);    // rise ~0.9 s
+        set (v, "timeMachine", "repeats", 0.5f);
+        const int n = (int) (fsr * 2.5);
+        std::vector<float> l ((size_t) n), r ((size_t) n);
+        for (int i = 0; i < n; ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.2 * std::sin (2 * pi * 196.0 * i / fsr));
+        runStereo (p, l, r, v);
+        const double early = rms (l, (int) (0.375 * fsr), (int) (0.6 * fsr)), late = rms (l, (int) (1.8 * fsr), (int) (2.3 * fsr));
+        check (early < late * 0.3, "Time Machine Swell: the repeats swell in (" + juce::String (20.0 * std::log10 (early / late), 1) + " dB)");
+    }
+
+    {
+        // Stability: every machine at full REPEATS, GRIT and modulation stays bounded.
+        const double fsr = 48000.0;
+        bool ok = true; float worstPeak = 0.0f;
+        for (int m = 0; m < mc::numDelays; ++m)
+        {
+            TimeMachine p; p.prepare (fsr, 256);
+            auto v = defaults ("timeMachine");
+            set (v, "timeMachine", "type", typeValue (m, mc::numDelays));
+            for (const char* id : { "repeats", "mix", "grit", "speed", "depth", "tweak" }) set (v, "timeMachine", id, 1.0f);
+            set (v, "timeMachine", "time", 0.0f);   // 1/16: the fastest build-up
+            const int n = (int) (fsr * 8.0);
+            std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+            Noise nz;
+            for (int i = 0; i < (int) (fsr * 1.0); ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.5 * nz.next());
+            runStereo (p, l, r, v);
+            for (int i = 0; i < n; ++i) { ok = ok && std::isfinite (l[(size_t) i]); worstPeak = std::max (worstPeak, std::abs (l[(size_t) i])); }
+        }
+        std::cout << "    Time Machine worst peak at full settings: " << juce::String (worstPeak, 2) << "\n";
+        check (ok && worstPeak < 4.0f, "Time Machine: every machine at full settings stays bounded");
+    }
+
+    {
+        // Trails and true pass-through.
+        const double fsr = 48000.0;
+        TimeMachine p; p.prepare (fsr, 256);
+        auto v = defaults ("timeMachine");
+        const int n = (int) (fsr * 1.5);
+        std::vector<float> l ((size_t) n, 0.0f), r ((size_t) n, 0.0f);
+        for (int i = 0; i < 4800; ++i) l[(size_t) i] = r[(size_t) i] = (float) (0.3 * std::sin (2 * pi * 220.0 * i / fsr));
+        runStereo (p, l, r, v, 120.0, true, 0, 4864);
+        runStereo (p, l, r, v, 120.0, false, 4864, n);
+        const double echo = rms (l, (int) (0.375 * fsr), (int) (0.375 * fsr) + 4800);
+        std::vector<float> a (512, 0.123f), b (512, 0.123f);
+        TimeMachine q; q.prepare (fsr, 512);
+        float* chs[2] = { a.data(), b.data() };
+        q.process (chs, 2, 512, v.data(), false, {});
+        check (echo > 0.01 && a[100] == 0.123f && b[511] == 0.123f, "Time Machine: repeats carry on when switched off; off = untouched");
     }
 
     // --- Chain ------------------------------------------------------------------

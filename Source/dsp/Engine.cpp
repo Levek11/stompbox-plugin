@@ -3,6 +3,8 @@
 #include "pedals/Afterglow.h"
 #include "pedals/Dynamics.h"
 #include "pedals/Utility.h"
+#include "pedals/OpenSky.h"
+#include "pedals/TimeMachine.h"
 
 namespace stompbox
 {
@@ -28,6 +30,8 @@ Engine::Engine()
     pedals[(size_t) board::indexOf ("freshSqueeze")] = std::make_unique<dsp::FreshSqueeze>();
     pedals[(size_t) board::indexOf ("trueTone")]   = std::make_unique<dsp::TrueTone>();
     pedals[(size_t) board::indexOf ("sculptor")]   = std::make_unique<dsp::Sculptor>();
+    pedals[(size_t) board::indexOf ("openSky")]    = std::make_unique<dsp::OpenSky>();
+    pedals[(size_t) board::indexOf ("timeMachine")] = std::make_unique<dsp::TimeMachine>();
 
     const auto& cat = board::catalog();
     for (size_t i = 0; i < cat.size(); ++i)

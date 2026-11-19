@@ -1,4 +1,5 @@
 #include "PedalPainter.h"
+#include "board/Machines.h"
 #include "StompLookAndFeel.h"
 
 namespace stompbox::ui
@@ -39,10 +40,111 @@ int PedalPainter::controlAt (const PedalDef& def, juce::Point<float> p)
     return -1;
 }
 
+//==============================================================================
+// Open Sky and Time Machine: knobs whose meaning depends on the machine.
+namespace mc = stompbox::board::machines;
+
+static bool isBigDigital (const PedalDef& def)
+{
+    return std::strcmp (def.id, "openSky") == 0 || std::strcmp (def.id, "timeMachine") == 0;
+}
+
+static float valueOf (const PedalDef& def, const BoardModel::PedalState& st, const char* id)
+{
+    for (size_t k = 0; k < def.controls.size(); ++k)
+        if (std::strcmp (def.controls[k].id, id) == 0)
+            return k < st.values.size() ? st.values[k] : def.controls[k].defaultValue;
+    return 0.0f;
+}
+
+/** The role of a machine-dependent knob, or nullptr if it's a fixed one. */
+static const mc::KnobRole* roleOf (const PedalDef& def, const BoardModel::PedalState& st, const char* id)
+{
+    if (std::strcmp (def.id, "openSky") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numReverbs);
+        if (std::strcmp (id, "param1") == 0) return &mc::reverbParams[m][0];
+        if (std::strcmp (id, "param2") == 0) return &mc::reverbParams[m][1];
+    }
+    else if (std::strcmp (def.id, "timeMachine") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numDelays);
+        static const char* const ids[5] = { "filter", "grit", "speed", "depth", "tweak" };
+        for (int k = 0; k < 5; ++k)
+            if (std::strcmp (id, ids[k]) == 0) return &mc::delayKnobs[m][k];
+    }
+    return nullptr;
+}
+
+static juce::String secondsText (double s)
+{
+    return s < 1.0 ? juce::String (juce::roundToInt (s * 1000.0)) + " ms" : juce::String (s, s < 10.0 ? 2 : 1) + " s";
+}
+
+static juce::String bigDigitalValue (const PedalDef& def, const BoardModel::PedalState& st, const ControlDef& c, float v)
+{
+    if (auto* role = roleOf (def, st, c.id))
+    {
+        if (const int steps = mc::countSteps (role->steps); steps > 0)
+            return juce::StringArray::fromTokens (role->steps, "|", "")[mc::stepIndex (v, steps)];
+        if (std::strcmp (role->label, "RISE") == 0)
+            return secondsText (std::strcmp (def.id, "openSky") == 0 ? mc::riseSeconds (v) : mc::delayRiseSeconds (v));
+        return juce::String (v * 10.0f, 1);
+    }
+    if (std::strcmp (def.id, "openSky") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numReverbs);
+        if (std::strcmp (c.id, "decay") == 0)    return secondsText (mc::decaySeconds (m, v));
+        if (std::strcmp (c.id, "predelay") == 0) return secondsText (mc::preDelaySeconds (v));
+        if (std::strcmp (c.id, "level") == 0)
+        {
+            const float db = (v - 0.5f) * 12.0f;
+            return (db > 0.05f ? "+" : "") + juce::String (db, 1) + " dB";
+        }
+    }
+    else if (std::strcmp (c.id, "time") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numDelays);
+        if (valueOf (def, st, "sync") < 0.5f)
+            return mc::divisionNames[mc::stepIndex (v, mc::numDivisions)];
+        return juce::String (juce::roundToInt (mc::freeDelayMs (m, valueOf (def, st, "tweak"), v))) + " ms";
+    }
+    return juce::String (v * 10.0f, 1);
+}
+
+juce::String PedalPainter::labelText (const PedalDef& def, const BoardModel::PedalState& st, int index)
+{
+    const auto& c = def.controls[(size_t) index];
+    if (auto* role = roleOf (def, st, c.id))
+        return role->label;
+    return c.label;
+}
+
+juce::String PedalPainter::displayText (const PedalDef& def, const BoardModel::PedalState& st)
+{
+    if (std::strcmp (def.id, "openSky") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numReverbs);
+        return juce::String (mc::reverbNames[m]) + "  " + secondsText (mc::decaySeconds (m, valueOf (def, st, "decay")));
+    }
+    if (std::strcmp (def.id, "timeMachine") == 0)
+    {
+        const int m = mc::stepIndex (valueOf (def, st, "type"), mc::numDelays);
+        const float t = valueOf (def, st, "time");
+        const juce::String time = valueOf (def, st, "sync") < 0.5f
+                                    ? juce::String (mc::divisionNames[mc::stepIndex (t, mc::numDivisions)])
+                                    : juce::String (juce::roundToInt (mc::freeDelayMs (m, valueOf (def, st, "tweak"), t))) + "ms";
+        return juce::String (mc::delayNames[m]) + "  " + time;
+    }
+    return def.displayText;
+}
+
 juce::String PedalPainter::valueText (const PedalDef& def, const BoardModel::PedalState& st, int index)
 {
     const auto& c = def.controls[(size_t) index];
     const float v = st.values[(size_t) index];
+    if (isBigDigital (def) && c.kind == ControlDef::Kind::knob && c.positions <= 1)
+        return bigDigitalValue (def, st, c, v);
     if (c.msMax > 0.0f)
     {
         for (size_t k = 0; k < def.controls.size(); ++k)
@@ -166,7 +268,7 @@ static void drawLettering (juce::Graphics& g, const juce::String& text, juce::Fo
     }
 }
 
-static void drawDecor (juce::Graphics& g, const PedalDef& def, const PedalPainter::Look& look)
+static void drawDecor (juce::Graphics& g, const PedalDef& def, const BoardModel::PedalState& st, const PedalPainter::Look& look)
 {
     switch (def.decor)
     {
@@ -178,13 +280,14 @@ static void drawDecor (juce::Graphics& g, const PedalDef& def, const PedalPainte
             g.setColour (juce::Colours::black.withAlpha (0.5f));
             g.drawRoundedRectangle (screen.reduced (0.5f), 3.0f, 1.0f);
             g.setColour (col (def.displayColour));
-            drawTracked (g, def.displayText, Fonts::ui (9.0f, true), 0.06f, screen, juce::Justification::centred);
+            drawTracked (g, PedalPainter::displayText (def, st), Fonts::ui (8.0f, true), 0.04f, screen, juce::Justification::centred);
 
-            // Mode indicator dots either side of the TYPE knob
+            // Machine LEDs either side of the TYPE knob: 4 on the left, 3 on the right
+            const int machine = mc::stepIndex (valueOf (def, st, "type"), 7);
             for (int side = 0; side < 2; ++side)
-                for (int i = 0; i < 4; ++i)
+                for (int i = 0; i < (side == 0 ? 4 : 3); ++i)
                 {
-                    const bool lit = side == 0 && i == 3;
+                    const bool lit = (side == 0 ? i : 4 + i) == machine;
                     const auto d = juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ side == 0 ? 33.0f : 75.0f, 45.0f + 7.0f * (float) i });
                     g.setColour (lit ? juce::Colour (0xff8dff7a) : juce::Colour (0xff0d3a47));
                     g.fillEllipse (d);
@@ -279,7 +382,7 @@ void PedalPainter::draw (juce::Graphics& g, const PedalDef& def, const BoardMode
     g.setColour (juce::Colours::black.withAlpha (0.2f));
     g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, h - 3.0f, w - 8.0f, 3.0f), 1.5f);
 
-    drawDecor (g, def, look);
+    drawDecor (g, def, st, look);
 
     // Controls
     for (size_t i = 0; i < def.controls.size(); ++i)
@@ -308,7 +411,7 @@ void PedalPainter::draw (juce::Graphics& g, const PedalDef& def, const BoardMode
                 g.fillRoundedRectangle (area.expanded (1.5f, 0.6f), 1.5f);
             }
             g.setColour (active ? juce::Colours::white : text.withAlpha (0.9f));
-            drawTracked (g, active ? PedalPainter::valueText (def, st, (int) i) : juce::String (c.label),
+            drawTracked (g, active ? PedalPainter::valueText (def, st, (int) i) : PedalPainter::labelText (def, st, (int) i),
                          Fonts::label (fontH), 0.08f, area, juce::Justification::centred);
         }
     }

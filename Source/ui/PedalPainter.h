@@ -40,6 +40,10 @@ struct PedalPainter
     /** Value shown for a control: 0-10 for knobs and sliders, position name for
         toggles, milliseconds for time knobs ("SYNC" while synced to Logic). */
     static juce::String valueText (const board::PedalDef&, const board::BoardModel::PedalState&, int control);
+    /** A control's label; on Open Sky and Time Machine some depend on the machine. */
+    static juce::String labelText (const board::PedalDef&, const board::BoardModel::PedalState&, int control);
+    /** What a pedal's screen shows. */
+    static juce::String displayText (const board::PedalDef&, const board::BoardModel::PedalState&);
 };
 
 /** "BLUE\nHIGHWAY" -> "Blue Highway". */

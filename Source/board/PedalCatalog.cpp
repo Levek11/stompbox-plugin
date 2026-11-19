@@ -1,4 +1,5 @@
 #include "PedalCatalog.h"
+#include "Machines.h"
 #include <cstring>
 
 namespace stompbox::board
@@ -18,16 +19,17 @@ static std::vector<ControlDef> threeKnobBoss (const char* a, const char* b, cons
              { c, c, K::knob, 56.0f, 48.0f, 20.0f, dc } };
 }
 
-static std::vector<ControlDef> bigDigital (const char* const top[4], const char* const bottom[4])
+static std::vector<ControlDef> bigDigital (const char* typeSteps, const char* const top[4], const char* const bottom[4],
+                                           const float topDefaults[4], const float bottomDefaults[4], float typeDefault)
 {
     std::vector<ControlDef> c;
-    c.push_back ({ "type", "TYPE", K::knob, 54.0f, 55.0f, 26.0f, 0.0f });
+    c.push_back ({ "type", "TYPE", K::knob, 54.0f, 55.0f, 26.0f, typeDefault, 7, 0xff161618, 0xfff4f1ea, typeSteps });
     const float topX[4] = { 115.0f, 144.0f, 172.0f, 200.0f };
     for (int i = 0; i < 4; ++i)
-        c.push_back ({ top[i], top[i], K::knob, topX[i], i == 0 ? 27.0f : 26.0f, i == 0 ? 24.0f : 22.0f, 0.5f });
+        c.push_back ({ top[i], top[i], K::knob, topX[i], i == 0 ? 27.0f : 26.0f, i == 0 ? 24.0f : 22.0f, topDefaults[i] });
     const float botX[4] = { 130.0f, 158.0f, 186.0f, 214.0f };
     for (int i = 0; i < 4; ++i)
-        c.push_back ({ bottom[i], bottom[i], K::knob, botX[i], 58.0f, 22.0f, 0.5f });
+        c.push_back ({ bottom[i], bottom[i], K::knob, botX[i], 58.0f, 22.0f, bottomDefaults[i] });
     return c;
 }
 
@@ -95,19 +97,34 @@ static std::vector<PedalDef> build()
     }
 
     // --- Row 3: the big stereo digital pedals ------------------------------------
+    // Control ids are generic (param1, tweak...): what they do depends on the
+    // machine (see board/Machines.h); the close-up shows each one's meaning.
     {
-        static const char* const top[4] = { "DECAY", "PRE-DELAY", "MIX", "TONE" };
-        static const char* const bot[4] = { "PARAM 1", "PARAM 2", "MOD", "LEVEL" };
-        v.push_back ({ "openSky", "OPEN SKY", "REVERB", "Strymon BigSky",
-                       0xff27a8c8, 0xff0f2a33, 2, true, 1, 85.0f, 14.0f, D::display, "SHIMMER", 0xff7fe7ff, 5,
-                       bigDigital (top, bot) });
+        static const char* const top[4] = { "decay", "predelay", "mix", "tone" };
+        static const char* const bot[4] = { "param1", "param2", "mod", "level" };
+        const float topDef[4] = { 0.55f, 0.30f, 0.35f, 0.50f };
+        const float botDef[4] = { 0.50f, 0.50f, 0.40f, 0.50f };
+        PedalDef p { "openSky", "OPEN SKY", "REVERB", "Strymon BigSky",
+                     0xff27a8c8, 0xff0f2a33, 2, true, 1, 85.0f, 14.0f, D::display, "SHIMMER", 0xff7fe7ff, 0,
+                     bigDigital (machines::reverbSteps, top, bot, topDef, botDef, 1.0f) };
+        static const char* const topLabels[4] = { "DECAY", "PRE-DELAY", "MIX", "TONE" };
+        static const char* const botLabels[4] = { "PARAM 1", "PARAM 2", "MOD", "LEVEL" };
+        for (int i = 0; i < 4; ++i) { p.controls[(size_t) i + 1].label = topLabels[i]; p.controls[(size_t) i + 5].label = botLabels[i]; }
+        v.push_back (p);
     }
     {
-        static const char* const top[4] = { "TIME", "REPEATS", "MIX", "FILTER" };
-        static const char* const bot[4] = { "GRIT", "SPEED", "DEPTH", "TWEAK" };
-        v.push_back ({ "timeMachine", "TIME MACHINE", "DELAY", "Strymon TimeLine",
-                       0xff66686e, light, 2, true, 1, 85.0f, 14.0f, D::display, "D.8TH SYNC", 0xff9dff9a, 5,
-                       bigDigital (top, bot) });
+        static const char* const top[4] = { "time", "repeats", "mix", "filter" };
+        static const char* const bot[4] = { "grit", "speed", "depth", "tweak" };
+        const float topDef[4] = { 4.0f / 7.0f, 0.35f, 0.35f, 0.30f };   // D1/8, synced
+        const float botDef[4] = { 0.0f, 0.30f, 0.20f, 0.30f };
+        PedalDef p { "timeMachine", "TIME MACHINE", "DELAY", "Strymon TimeLine",
+                     0xff66686e, light, 2, true, 1, 85.0f, 14.0f, D::display, "D1/8 SYNC", 0xff9dff9a, 0,
+                     bigDigital (machines::delaySteps, top, bot, topDef, botDef, 0.0f) };
+        static const char* const topLabels[4] = { "TIME", "REPEATS", "MIX", "FILTER" };
+        static const char* const botLabels[4] = { "GRIT", "SPEED", "DEPTH", "TWEAK" };
+        for (int i = 0; i < 4; ++i) { p.controls[(size_t) i + 1].label = topLabels[i]; p.controls[(size_t) i + 5].label = botLabels[i]; }
+        p.controls.push_back ({ "sync", "SYNC", K::toggle, 18.0f, 57.0f, 11.0f, 0.0f, 2, dark, light, "SYNC|FREE" });
+        v.push_back (p);
     }
 
     // --- Row 4: delay, utilities, 1176 -------------------------------------------

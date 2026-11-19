@@ -10,6 +10,8 @@
 #include "dsp/ToneStack.h"
 #include "BoardTests.h"
 #include "PedalTests.h"
+#include "dsp/pedals/OpenSky.h"
+#include "dsp/pedals/TimeMachine.h"
 
 using namespace stompbox;
 
@@ -393,6 +395,83 @@ int main (int argc, char** argv)
             if (w) w->writeFromAudioSampleBuffer (io, 0, n);
             std::cout << "    rendered " << f.getFullPathName() << "  (" << juce::String (rmsDb (io.getReadPointer (0), n), 1) << " dBFS RMS, peak " << juce::String (juce::Decibels::gainToDecibels (io.getMagnitude (0, 0, n)), 1) << " dBFS)\n";
         }
+    }
+
+    //==========================================================================
+    // Open Sky / Time Machine: each machine on a guitar phrase (pedal only, no
+    // amp) to listen to, plus a CPU check.
+    {
+        namespace mc = board::machines;
+        auto guitar = makeGuitar (fs, 4.0, 0.35f);
+        const int n = guitar.getNumSamples() + (int) (fs * 4.0);
+        auto renderPedal = [&] (dsp::Pedal& p, const std::vector<float>& v, juce::AudioBuffer<float>& io)
+        {
+            io.setSize (2, n); io.clear();
+            io.copyFrom (0, 0, guitar, 0, 0, guitar.getNumSamples());
+            io.copyFrom (1, 0, guitar, 0, 0, guitar.getNumSamples());
+            p.prepare (fs, block);
+            dsp::PedalContext ctx; ctx.bpm = 72.0;
+            const auto t0 = juce::Time::getHighResolutionTicks();
+            for (int i = 0; i < n; i += block)
+            {
+                float* ch[2] = { io.getWritePointer (0, i), io.getWritePointer (1, i) };
+                p.process (ch, 2, std::min (block, n - i), v.data(), true, ctx);
+            }
+            return juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0) / ((double) n / fs);
+        };
+        auto defaultsOf = [] (const char* id)
+        {
+            std::vector<float> v (16, 0.0f);
+            const auto& cs = board::catalog()[(size_t) board::indexOf (id)].controls;
+            for (size_t i = 0; i < cs.size(); ++i) v[i] = cs[i].defaultValue;
+            return v;
+        };
+        double worstLoad = 0.0;
+        juce::WavAudioFormat wav;
+        const juce::File dir = argc > 1 ? juce::File (juce::String (argv[1])) : juce::File();
+        for (int pedal = 0; pedal < 2; ++pedal)
+        {
+            const int count = pedal == 0 ? (int) mc::numReverbs : (int) mc::numDelays;
+            for (int m = 0; m < count; ++m)
+            {
+                auto v = defaultsOf (pedal == 0 ? "openSky" : "timeMachine");
+                v[0] = (float) m / (float) (count - 1);   // TYPE is control 0
+                std::unique_ptr<dsp::Pedal> p;
+                if (pedal == 0) p = std::make_unique<dsp::OpenSky>(); else p = std::make_unique<dsp::TimeMachine>();
+                juce::AudioBuffer<float> io;
+                worstLoad = std::max (worstLoad, renderPedal (*p, v, io));
+                if (argc > 1)
+                {
+                    auto f = dir.getChildFile (juce::String (pedal == 0 ? "opensky_" : "timemachine_")
+                                               + (pedal == 0 ? mc::reverbNames[m] : mc::delayNames[m]) + ".wav");
+                    f.deleteFile();
+                    std::unique_ptr<juce::AudioFormatWriter> w (wav.createWriterFor (new juce::FileOutputStream (f), fs, 2, 24, {}, 0));
+                    if (w) w->writeFromAudioSampleBuffer (io, 0, n);
+                }
+            }
+        }
+        // Impulse responses of each reverb machine (100% wet), for inspecting the tails.
+        if (argc > 1)
+            for (int m = 0; m < (int) mc::numReverbs; ++m)
+            {
+                auto v = defaultsOf ("openSky");
+                v[0] = (float) m / 6.0f; v[3] = 1.0f;   // TYPE, MIX
+                dsp::OpenSky p; p.prepare (fs, block);
+                const int len = (int) (fs * 6.0);
+                juce::AudioBuffer<float> io (2, len); io.clear();
+                io.setSample (0, 10, 0.5f); io.setSample (1, 10, 0.5f);
+                dsp::PedalContext ctx;
+                for (int i = 0; i < len; i += block)
+                {
+                    float* ch[2] = { io.getWritePointer (0, i), io.getWritePointer (1, i) };
+                    p.process (ch, 2, std::min (block, len - i), v.data(), true, ctx);
+                }
+                auto f = dir.getChildFile (juce::String ("ir_opensky_") + mc::reverbNames[m] + ".wav");
+                f.deleteFile();
+                std::unique_ptr<juce::AudioFormatWriter> w (wav.createWriterFor (new juce::FileOutputStream (f), fs, 2, 24, {}, 0));
+                if (w) w->writeFromAudioSampleBuffer (io, 0, len);
+            }
+        std::cout << "\n    Open Sky / Time Machine worst CPU: " << juce::String (worstLoad * 100.0, 2) << "% of one core (realtime)\n";
     }
 
     std::cout << "\n" << (failures == 0 ? "ALL CHECKS PASSED" : juce::String (failures) + " CHECK(S) FAILED") << "\n";
